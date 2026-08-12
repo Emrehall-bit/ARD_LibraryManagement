@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Api/">
+    <Project Path="src/LibrarySystem.Api/LibrarySystem.Api.csproj" Id="505759f8-340e-4939-b066-530a5a3c60dc" />
+  </Folder>
+  <Folder Name="/src/BuildingBlocks/">
+    <Project Path="src/BuildingBlocks/LibrarySystem.Shared/LibrarySystem.Shared.csproj" />
+  </Folder>
+  <Folder Name="/src/Modules/">
+    <Project Path="src/Modules/LibrarySystem.Modules.Books/LibrarySystem.Modules.Books.csproj" Id="9c8a9196-5872-4ba3-af9f-664bd45a6c8b" />
+    <Project Path="src/Modules/LibrarySystem.Modules.Borrowing/LibrarySystem.Modules.Borrowing.csproj" Id="2420d9d5-343b-4714-8fe7-d1d05f2e03ba" />
+    <Project Path="src/Modules/LibrarySystem.Modules.Identity/LibrarySystem.Modules.Identity.csproj" Id="1a5169bf-25b2-4ffc-a037-41f9f2d3db1d" />
+  </Folder>
+</Solution>
