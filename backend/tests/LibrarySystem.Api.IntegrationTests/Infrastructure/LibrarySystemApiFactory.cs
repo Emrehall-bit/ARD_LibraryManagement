@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LibrarySystem.Modules.Books.Infrastructure;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,29 @@ namespace LibrarySystem.Api.IntegrationTests.Infrastructure;
 public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     private const string TestDatabaseName = "library_system_tests";
+    private const string TestJwtIssuer = "LibrarySystem.Api.Tests";
+    private const string TestJwtAudience = "LibrarySystem.Api.Tests";
+    private const string TestJwtKey = "library-system-tests-jwt-key-32-chars";
 
     private readonly string connectionString = CreateTestConnectionString();
 
+    public LibrarySystemApiFactory()
+    {
+        Environment.SetEnvironmentVariable("Jwt__Issuer", TestJwtIssuer);
+        Environment.SetEnvironmentVariable("Jwt__Audience", TestJwtAudience);
+        Environment.SetEnvironmentVariable("Jwt__Key", TestJwtKey);
+        Environment.SetEnvironmentVariable("Jwt__ExpirationMinutes", "60");
+    }
+
     public HttpClient CreateApiClient()
+    {
+        var client = CreateUnauthenticatedApiClient();
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.HeaderName, TestAuthenticationHandler.UserName);
+
+        return client;
+    }
+
+    public HttpClient CreateUnauthenticatedApiClient()
     {
         return CreateClient(new WebApplicationFactoryClientOptions
         {
@@ -37,7 +57,17 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
 
     async Task IAsyncLifetime.DisposeAsync()
     {
-        await ResetBooksDataAsync();
+        try
+        {
+            await ResetBooksDataAsync();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Jwt__Issuer", null);
+            Environment.SetEnvironmentVariable("Jwt__Audience", null);
+            Environment.SetEnvironmentVariable("Jwt__Key", null);
+            Environment.SetEnvironmentVariable("Jwt__ExpirationMinutes", null);
+        }
     }
 
     public async Task ResetBooksDataAsync()
@@ -60,6 +90,10 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
             configurationBuilder.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["ConnectionStrings:LibrarySystemDatabase"] = connectionString,
+                ["Jwt:Issuer"] = TestJwtIssuer,
+                ["Jwt:Audience"] = TestJwtAudience,
+                ["Jwt:Key"] = TestJwtKey,
+                ["Jwt:ExpirationMinutes"] = "60",
                 ["Logging:EventLog:LogLevel:Default"] = "None"
             });
         });
@@ -75,6 +109,16 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
                     npgsqlOptions.MigrationsAssembly(typeof(BooksDbContext).Assembly.FullName);
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "books");
                 }));
+
+            services
+                .AddAuthentication(options =>
+                {
+                    options.DefaultAuthenticateScheme = TestAuthenticationHandler.AuthenticationScheme;
+                    options.DefaultChallengeScheme = TestAuthenticationHandler.AuthenticationScheme;
+                })
+                .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
+                    TestAuthenticationHandler.AuthenticationScheme,
+                    _ => { });
         });
     }
 

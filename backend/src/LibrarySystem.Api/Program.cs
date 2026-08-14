@@ -18,7 +18,7 @@ var databaseConnectionString = builder.Configuration.GetConnectionString("Librar
 
 builder.Services.AddBooksInfrastructure(databaseConnectionString);
 builder.Services.AddBorrowingInfrastructure(databaseConnectionString);
-builder.Services.AddIdentityInfrastructure(databaseConnectionString);
+builder.Services.AddIdentityInfrastructure(databaseConnectionString, builder.Configuration);
 
 var app = builder.Build();
 
@@ -32,6 +32,7 @@ app.UseHttpsRedirection();
 
 app.UseExceptionHandler();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

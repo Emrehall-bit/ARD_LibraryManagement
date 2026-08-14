@@ -17,6 +17,18 @@ internal sealed class GlobalExceptionHandler(
         var problemDetails = exception switch
         {
             ValidationException validationException => CreateValidationProblemDetails(validationException),
+            AuthenticationFailedException authenticationFailedException => new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Authentication failed.",
+                Detail = authenticationFailedException.Message
+            },
+            ConflictException conflictException => new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Conflict.",
+                Detail = conflictException.Message
+            },
             NotFoundException notFoundException => new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,

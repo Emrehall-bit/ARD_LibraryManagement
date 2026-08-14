@@ -1,11 +1,13 @@
 using LibrarySystem.Modules.Books.Application.Dtos;
 using LibrarySystem.Modules.Books.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LibrarySystem.Modules.Books.Presentation;
 
 [ApiController]
+[Authorize]
 [Route("api/books")]
 public sealed class BooksController(IBookService bookService) : ControllerBase
 {
