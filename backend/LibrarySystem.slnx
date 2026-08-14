@@ -11,4 +11,7 @@
     <Project Path="src/Modules/LibrarySystem.Modules.Borrowing/LibrarySystem.Modules.Borrowing.csproj" Id="2420d9d5-343b-4714-8fe7-d1d05f2e03ba" />
     <Project Path="src/Modules/LibrarySystem.Modules.Identity/LibrarySystem.Modules.Identity.csproj" Id="1a5169bf-25b2-4ffc-a037-41f9f2d3db1d" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LibrarySystem.Api.IntegrationTests/LibrarySystem.Api.IntegrationTests.csproj" />
+  </Folder>
 </Solution>
