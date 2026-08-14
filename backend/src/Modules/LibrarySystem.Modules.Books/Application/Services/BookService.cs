@@ -1,10 +1,14 @@
+using FluentValidation;
 using LibrarySystem.Modules.Books.Application.Dtos;
 using LibrarySystem.Modules.Books.Application.Interfaces;
 using LibrarySystem.Modules.Books.Domain;
+using LibrarySystem.Shared.Exceptions;
 
 namespace LibrarySystem.Modules.Books.Application.Services;
 
-internal sealed class BookService(IBookRepository bookRepository) : IBookService
+internal sealed class BookService(
+    IBookRepository bookRepository,
+    IValidator<CreateBookRequestDto> createBookRequestValidator) : IBookService
 {
     public async Task<IReadOnlyList<BookResponseDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
@@ -24,6 +28,8 @@ internal sealed class BookService(IBookRepository bookRepository) : IBookService
         CreateBookRequestDto request,
         CancellationToken cancellationToken = default)
     {
+        await createBookRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
+
         var book = new Book(Guid.NewGuid(), request.Name, request.Author, request.Stock);
 
         await bookRepository.AddAsync(book, cancellationToken);
@@ -44,7 +50,7 @@ internal sealed class BookService(IBookRepository bookRepository) : IBookService
     {
         var book = await bookRepository.GetByIdAsync(id, cancellationToken);
 
-        return book ?? throw new KeyNotFoundException($"Book with id '{id}' was not found.");
+        return book ?? throw new NotFoundException($"Book with id '{id}' was not found.");
     }
 
     private static BookResponseDto MapToResponseDto(Book book)

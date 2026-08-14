@@ -1,3 +1,4 @@
+using LibrarySystem.Api.ExceptionHandling;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure;
@@ -9,6 +10,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 
 var databaseConnectionString = builder.Configuration.GetConnectionString("LibrarySystemDatabase")
     ?? throw new InvalidOperationException("Connection string 'LibrarySystemDatabase' is not configured.");
@@ -26,6 +29,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseExceptionHandler();
 
 app.UseAuthorization();
 
