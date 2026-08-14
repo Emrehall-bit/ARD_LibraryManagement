@@ -1,3 +1,7 @@
+using LibrarySystem.Modules.Books.Infrastructure;
+using LibrarySystem.Modules.Borrowing.Infrastructure;
+using LibrarySystem.Modules.Identity.Infrastructure;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -5,6 +9,13 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+
+var databaseConnectionString = builder.Configuration.GetConnectionString("LibrarySystemDatabase")
+    ?? throw new InvalidOperationException("Connection string 'LibrarySystemDatabase' is not configured.");
+
+builder.Services.AddBooksInfrastructure(databaseConnectionString);
+builder.Services.AddBorrowingInfrastructure(databaseConnectionString);
+builder.Services.AddIdentityInfrastructure(databaseConnectionString);
 
 var app = builder.Build();
 
