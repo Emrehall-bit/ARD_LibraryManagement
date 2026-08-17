@@ -1,7 +1,9 @@
 using System.Text.Json;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
+using LibrarySystem.Modules.Identity.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -14,10 +16,11 @@ namespace LibrarySystem.Api.IntegrationTests.Infrastructure;
 
 public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
+    private const string TestOrBearerAuthenticationScheme = "TestOrBearer";
     private const string TestDatabaseName = "library_system_tests";
-    private const string TestJwtIssuer = "LibrarySystem.Api.Tests";
-    private const string TestJwtAudience = "LibrarySystem.Api.Tests";
-    private const string TestJwtKey = "library-system-tests-jwt-key-32-chars";
+    public const string TestJwtIssuer = "LibrarySystem.Api.Tests";
+    public const string TestJwtAudience = "LibrarySystem.Api.Tests";
+    public const string TestJwtKey = "library-system-tests-jwt-key-32-chars";
 
     private readonly string connectionString = CreateTestConnectionString();
 
@@ -52,7 +55,9 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
         using var scope = Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
         var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var identityDbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
 
+        await identityDbContext.Database.MigrateAsync();
         await booksDbContext.Database.MigrateAsync();
         await borrowingDbContext.Database.MigrateAsync();
         await ResetDataAsync();
@@ -85,8 +90,13 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
 
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            TRUNCATE TABLE borrowing.borrow_records;
-            TRUNCATE TABLE books.books;
+            TRUNCATE TABLE
+                borrowing.borrow_records,
+                books.books,
+                identity."AspNetUserTokens",
+                identity."AspNetUserLogins",
+                identity."AspNetUserClaims",
+                identity."AspNetUsers";
             """;
 
         await command.ExecuteNonQueryAsync();
@@ -115,6 +125,8 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
             services.RemoveAll<BooksDbContext>();
             services.RemoveAll<DbContextOptions<BorrowingDbContext>>();
             services.RemoveAll<BorrowingDbContext>();
+            services.RemoveAll<DbContextOptions<IdentityDbContext>>();
+            services.RemoveAll<IdentityDbContext>();
 
             services.AddDbContext<BooksDbContext>(options =>
                 options.UseNpgsql(connectionString, npgsqlOptions =>
@@ -130,11 +142,32 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "borrowing");
                 }));
 
+            services.AddDbContext<IdentityDbContext>(options =>
+                options.UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    npgsqlOptions.MigrationsAssembly(typeof(IdentityDbContext).Assembly.FullName);
+                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
+                }));
+
             services
                 .AddAuthentication(options =>
                 {
-                    options.DefaultAuthenticateScheme = TestAuthenticationHandler.AuthenticationScheme;
-                    options.DefaultChallengeScheme = TestAuthenticationHandler.AuthenticationScheme;
+                    options.DefaultAuthenticateScheme = TestOrBearerAuthenticationScheme;
+                    options.DefaultChallengeScheme = TestOrBearerAuthenticationScheme;
+                })
+                .AddPolicyScheme(TestOrBearerAuthenticationScheme, displayName: null, options =>
+                {
+                    options.ForwardDefaultSelector = context =>
+                    {
+                        var authorizationHeader = context.Request.Headers.Authorization.ToString();
+
+                        if (authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        {
+                            return JwtBearerDefaults.AuthenticationScheme;
+                        }
+
+                        return TestAuthenticationHandler.AuthenticationScheme;
+                    };
                 })
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
                     TestAuthenticationHandler.AuthenticationScheme,
