@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LibrarySystem.Modules.Books.Infrastructure;
+using LibrarySystem.Modules.Borrowing.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -50,16 +51,18 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
 
         using var scope = Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
 
         await booksDbContext.Database.MigrateAsync();
-        await ResetBooksDataAsync();
+        await borrowingDbContext.Database.MigrateAsync();
+        await ResetDataAsync();
     }
 
     async Task IAsyncLifetime.DisposeAsync()
     {
         try
         {
-            await ResetBooksDataAsync();
+            await ResetDataAsync();
         }
         finally
         {
@@ -72,11 +75,19 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
 
     public async Task ResetBooksDataAsync()
     {
+        await ResetDataAsync();
+    }
+
+    public async Task ResetDataAsync()
+    {
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
         await using var command = connection.CreateCommand();
-        command.CommandText = "TRUNCATE TABLE books.books;";
+        command.CommandText = """
+            TRUNCATE TABLE borrowing.borrow_records;
+            TRUNCATE TABLE books.books;
+            """;
 
         await command.ExecuteNonQueryAsync();
     }
@@ -102,12 +113,21 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
         {
             services.RemoveAll<DbContextOptions<BooksDbContext>>();
             services.RemoveAll<BooksDbContext>();
+            services.RemoveAll<DbContextOptions<BorrowingDbContext>>();
+            services.RemoveAll<BorrowingDbContext>();
 
             services.AddDbContext<BooksDbContext>(options =>
                 options.UseNpgsql(connectionString, npgsqlOptions =>
                 {
                     npgsqlOptions.MigrationsAssembly(typeof(BooksDbContext).Assembly.FullName);
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "books");
+                }));
+
+            services.AddDbContext<BorrowingDbContext>(options =>
+                options.UseNpgsql(connectionString, npgsqlOptions =>
+                {
+                    npgsqlOptions.MigrationsAssembly(typeof(BorrowingDbContext).Assembly.FullName);
+                    npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "borrowing");
                 }));
 
             services

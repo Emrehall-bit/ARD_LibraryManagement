@@ -1,3 +1,7 @@
+using LibrarySystem.Modules.Borrowing.Application.Interfaces;
+using LibrarySystem.Modules.Borrowing.Application.Services;
+using LibrarySystem.Modules.Borrowing.Infrastructure.Repositories;
+using LibrarySystem.Modules.Borrowing.Infrastructure.Transactions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +19,10 @@ public static class DependencyInjection
                 npgsqlOptions.MigrationsAssembly(typeof(BorrowingDbContext).Assembly.FullName);
                 npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "borrowing");
             }));
+
+        services.AddScoped<IBorrowRepository, BorrowRepository>();
+        services.AddScoped<IBorrowingService, BorrowingService>();
+        services.AddScoped<IBorrowingTransactionCoordinator, BorrowingTransactionCoordinator>();
 
         return services;
     }

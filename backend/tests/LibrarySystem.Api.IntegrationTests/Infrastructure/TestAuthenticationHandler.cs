@@ -14,6 +14,7 @@ internal sealed class TestAuthenticationHandler(
     public const string AuthenticationScheme = "Test";
     public const string HeaderName = "X-Test-User";
     public const string UserName = "integration-test-user";
+    public const string UserId = "integration-test-user-id";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
@@ -24,7 +25,7 @@ internal sealed class TestAuthenticationHandler(
 
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, Guid.NewGuid().ToString()),
+            new Claim(ClaimTypes.NameIdentifier, UserId),
             new Claim(ClaimTypes.Name, userName!)
         };
 

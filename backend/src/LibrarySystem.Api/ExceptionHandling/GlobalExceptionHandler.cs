@@ -29,6 +29,12 @@ internal sealed class GlobalExceptionHandler(
                 Title = "Conflict.",
                 Detail = conflictException.Message
             },
+            BusinessException businessException => new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Business rule violation.",
+                Detail = businessException.Message
+            },
             NotFoundException notFoundException => new ProblemDetails
             {
                 Status = StatusCodes.Status404NotFound,

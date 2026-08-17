@@ -41,4 +41,19 @@ public sealed class Book
     public string Author { get; private set; } = string.Empty;
 
     public int Stock { get; private set; }
+
+    public void DecreaseStock()
+    {
+        if (Stock <= 0)
+        {
+            throw new InvalidOperationException("Book stock cannot be decreased below zero.");
+        }
+
+        Stock--;
+    }
+
+    public void IncreaseStock()
+    {
+        Stock++;
+    }
 }

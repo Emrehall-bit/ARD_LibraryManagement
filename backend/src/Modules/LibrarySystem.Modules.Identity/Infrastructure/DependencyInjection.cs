@@ -5,7 +5,9 @@ using LibrarySystem.Modules.Identity.Application.Interfaces;
 using LibrarySystem.Modules.Identity.Application.Services;
 using LibrarySystem.Modules.Identity.Application.Validators;
 using LibrarySystem.Modules.Identity.Domain;
+using LibrarySystem.Modules.Identity.Infrastructure.Authentication;
 using LibrarySystem.Modules.Identity.Infrastructure.Jwt;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -71,8 +73,10 @@ public static class DependencyInjection
             });
 
         services.AddAuthorization();
+        services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITokenService, JwtTokenService>();
+        services.AddScoped<ICurrentUser, CurrentUser>();
         services.AddScoped<IValidator<RegisterRequestDto>, RegisterRequestValidator>();
         services.AddScoped<IValidator<LoginRequestDto>, LoginRequestValidator>();
 
