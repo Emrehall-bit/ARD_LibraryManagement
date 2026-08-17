@@ -29,6 +29,12 @@ internal sealed class GlobalExceptionHandler(
                 Title = "Conflict.",
                 Detail = conflictException.Message
             },
+            ConcurrencyConflictException concurrencyConflictException => new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Concurrency conflict.",
+                Detail = concurrencyConflictException.Message
+            },
             BusinessException businessException => new ProblemDetails
             {
                 Status = StatusCodes.Status400BadRequest,

@@ -1,8 +1,10 @@
 using System.Data;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
+using LibrarySystem.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 
 namespace LibrarySystem.Modules.Borrowing.Infrastructure.Transactions;
 
@@ -44,9 +46,17 @@ internal sealed class BorrowingTransactionCoordinator(
 
                 return result;
             }
-            catch
+            catch (Exception exception)
             {
                 await transaction.RollbackAsync(cancellationToken);
+
+                if (IsPostgreSqlSerializationFailure(exception))
+                {
+                    throw new ConcurrencyConflictException(
+                        "The borrow operation could not be completed because the book inventory was changed concurrently.",
+                        exception);
+                }
+
                 throw;
             }
             finally
@@ -59,5 +69,19 @@ internal sealed class BorrowingTransactionCoordinator(
                 }
             }
         });
+    }
+
+    private static bool IsPostgreSqlSerializationFailure(Exception exception)
+    {
+        for (var currentException = exception; currentException is not null; currentException = currentException.InnerException)
+        {
+            if (currentException is PostgresException postgresException &&
+                postgresException.SqlState == PostgresErrorCodes.SerializationFailure)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

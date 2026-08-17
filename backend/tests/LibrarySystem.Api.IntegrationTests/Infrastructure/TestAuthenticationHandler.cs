@@ -13,6 +13,7 @@ internal sealed class TestAuthenticationHandler(
 {
     public const string AuthenticationScheme = "Test";
     public const string HeaderName = "X-Test-User";
+    public const string UserIdHeaderName = "X-Test-User-Id";
     public const string UserName = "integration-test-user";
     public const string UserId = "integration-test-user-id";
 
@@ -23,9 +24,14 @@ internal sealed class TestAuthenticationHandler(
             return Task.FromResult(AuthenticateResult.NoResult());
         }
 
+        var userId = Request.Headers.TryGetValue(UserIdHeaderName, out var requestedUserId) &&
+            !string.IsNullOrWhiteSpace(requestedUserId)
+                ? requestedUserId.ToString()
+                : UserId;
+
         var claims = new[]
         {
-            new Claim(ClaimTypes.NameIdentifier, UserId),
+            new Claim(ClaimTypes.NameIdentifier, userId),
             new Claim(ClaimTypes.Name, userName!)
         };
 
