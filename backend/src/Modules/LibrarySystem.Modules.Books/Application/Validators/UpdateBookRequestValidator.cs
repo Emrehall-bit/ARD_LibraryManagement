@@ -3,9 +3,9 @@ using LibrarySystem.Modules.Books.Application.Dtos;
 
 namespace LibrarySystem.Modules.Books.Application.Validators;
 
-internal sealed class CreateBookRequestValidator : AbstractValidator<CreateBookRequestDto>
+internal sealed class UpdateBookRequestValidator : AbstractValidator<UpdateBookRequestDto>
 {
-    public CreateBookRequestValidator()
+    public UpdateBookRequestValidator()
     {
         RuleFor(request => request.Name)
             .ApplyBookNameRules();

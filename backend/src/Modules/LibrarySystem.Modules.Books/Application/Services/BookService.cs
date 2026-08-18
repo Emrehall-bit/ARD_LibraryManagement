@@ -8,7 +8,8 @@ namespace LibrarySystem.Modules.Books.Application.Services;
 
 internal sealed class BookService(
     IBookRepository bookRepository,
-    IValidator<CreateBookRequestDto> createBookRequestValidator) : IBookService
+    IValidator<CreateBookRequestDto> createBookRequestValidator,
+    IValidator<UpdateBookRequestDto> updateBookRequestValidator) : IBookService
 {
     public async Task<IReadOnlyList<BookResponseDto>> GetAllAsync(CancellationToken cancellationToken = default)
     {
@@ -38,6 +39,21 @@ internal sealed class BookService(
         return MapToResponseDto(book);
     }
 
+    public async Task<BookResponseDto> UpdateAsync(
+        Guid id,
+        UpdateBookRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        await updateBookRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
+
+        var book = await GetTrackedBookOrThrowAsync(id, cancellationToken);
+
+        book.Update(request.Name, request.Author, request.Stock);
+        await bookRepository.SaveChangesAsync(cancellationToken);
+
+        return MapToResponseDto(book);
+    }
+
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var book = await GetBookOrThrowAsync(id, cancellationToken);
@@ -49,6 +65,13 @@ internal sealed class BookService(
     private async Task<Book> GetBookOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
         var book = await bookRepository.GetByIdAsync(id, cancellationToken);
+
+        return book ?? throw new NotFoundException($"Book with id '{id}' was not found.");
+    }
+
+    private async Task<Book> GetTrackedBookOrThrowAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var book = await bookRepository.GetTrackedByIdAsync(id, cancellationToken);
 
         return book ?? throw new NotFoundException($"Book with id '{id}' was not found.");
     }

@@ -10,6 +10,7 @@ namespace LibrarySystem.Modules.Borrowing.Application.Services;
 internal sealed class BorrowingService(
     IBorrowRepository borrowRepository,
     IBookInventoryService bookInventoryService,
+    IBookLookupService bookLookupService,
     ICurrentUser currentUser,
     IBorrowingTransactionCoordinator transactionCoordinator) : IBorrowingService
 {
@@ -83,8 +84,19 @@ internal sealed class BorrowingService(
     {
         var userId = GetCurrentUserId();
         var borrowRecords = await borrowRepository.GetActiveByUserIdAsync(userId, cancellationToken);
+        var bookIds = borrowRecords
+            .Select(borrowRecord => borrowRecord.BookId)
+            .Distinct()
+            .ToArray();
 
-        return borrowRecords.Select(MapToResponseDto).ToList();
+        var books = await bookLookupService.GetByIdsAsync(bookIds, cancellationToken);
+        var booksById = books.ToDictionary(book => book.Id);
+
+        return borrowRecords
+            .Select(borrowRecord => MapToResponseDto(
+                borrowRecord,
+                booksById.GetValueOrDefault(borrowRecord.BookId)))
+            .ToList();
     }
 
     private string GetCurrentUserId()
@@ -99,9 +111,18 @@ internal sealed class BorrowingService(
 
     private static BorrowRecordResponseDto MapToResponseDto(BorrowRecord borrowRecord)
     {
+        return MapToResponseDto(borrowRecord, book: null);
+    }
+
+    private static BorrowRecordResponseDto MapToResponseDto(
+        BorrowRecord borrowRecord,
+        BookLookupItem? book)
+    {
         return new BorrowRecordResponseDto(
             borrowRecord.Id,
             borrowRecord.BookId,
+            book?.Name,
+            book?.Author,
             borrowRecord.BorrowedAt,
             borrowRecord.ReturnedAt);
     }

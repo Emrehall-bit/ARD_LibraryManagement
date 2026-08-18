@@ -45,6 +45,20 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = book.Id }, book);
     }
 
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(BookResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BookResponseDto>> Update(
+        Guid id,
+        UpdateBookRequestDto request,
+        CancellationToken cancellationToken)
+    {
+        var book = await bookService.UpdateAsync(id, request, cancellationToken);
+
+        return Ok(book);
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

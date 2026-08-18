@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
+using LibrarySystem.Modules.Books.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace LibrarySystem.Api.IntegrationTests.Books;
 
@@ -98,6 +101,84 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task UpdateBook_WithValidRequest_ReturnsOkAndUpdatesBook()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var request = new UpdateBookRequest("Refactoring", "Martin Fowler", 5);
+
+        var response = await client.PutAsJsonAsync($"/api/books/{createdBook.Id}", request);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var updatedBook = await response.Content.ReadFromJsonAsync<BookResponse>();
+
+        Assert.NotNull(updatedBook);
+        Assert.Equal(createdBook.Id, updatedBook.Id);
+        Assert.Equal(request.Name, updatedBook.Name);
+        Assert.Equal(request.Author, updatedBook.Author);
+        Assert.Equal(request.Stock, updatedBook.Stock);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var storedBook = await dbContext.Books
+            .AsNoTracking()
+            .SingleAsync(book => book.Id == createdBook.Id);
+
+        Assert.Equal(request.Name, storedBook.Name);
+        Assert.Equal(request.Author, storedBook.Author);
+        Assert.Equal(request.Stock, storedBook.Stock);
+    }
+
+    [Fact]
+    public async Task UpdateBook_WithUnknownId_ReturnsNotFound()
+    {
+        using var client = factory.CreateApiClient();
+        var unknownId = Guid.NewGuid();
+        var request = new UpdateBookRequest("Refactoring", "Martin Fowler", 5);
+
+        var response = await client.PutAsJsonAsync($"/api/books/{unknownId}", request);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task UpdateBook_WithInvalidRequest_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var request = new UpdateBookRequest(string.Empty, string.Empty, -1);
+
+        var response = await client.PutAsJsonAsync($"/api/books/{createdBook.Id}", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        using var content = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var errors = content.RootElement.GetProperty("errors");
+
+        Assert.True(errors.TryGetProperty("Name", out var nameErrors));
+        Assert.True(nameErrors.GetArrayLength() > 0);
+        Assert.True(errors.TryGetProperty("Author", out var authorErrors));
+        Assert.True(authorErrors.GetArrayLength() > 0);
+        Assert.True(errors.TryGetProperty("Stock", out var stockErrors));
+        Assert.True(stockErrors.GetArrayLength() > 0);
+    }
+
+    [Fact]
+    public async Task UpdateBook_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+        var unknownId = Guid.NewGuid();
+        var request = new UpdateBookRequest("Refactoring", "Martin Fowler", 5);
+
+        var response = await client.PutAsJsonAsync($"/api/books/{unknownId}", request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateBook_WithInvalidRequest_ReturnsBadRequestWithValidationErrors()
     {
         using var client = factory.CreateApiClient();
@@ -144,6 +225,8 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     private sealed record CreateBookRequest(string Name, string Author, int Stock);
+
+    private sealed record UpdateBookRequest(string Name, string Author, int Stock);
 
     private sealed record BookResponse(Guid Id, string Name, string Author, int Stock);
 }

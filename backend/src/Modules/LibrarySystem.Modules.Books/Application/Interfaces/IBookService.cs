@@ -10,5 +10,10 @@ public interface IBookService
 
     Task<BookResponseDto> CreateAsync(CreateBookRequestDto request, CancellationToken cancellationToken = default);
 
+    Task<BookResponseDto> UpdateAsync(
+        Guid id,
+        UpdateBookRequestDto request,
+        CancellationToken cancellationToken = default);
+
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 }

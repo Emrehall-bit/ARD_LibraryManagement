@@ -13,6 +13,20 @@ public sealed class Book
             throw new ArgumentException("Book id cannot be empty.", nameof(id));
         }
 
+        Id = id;
+        Update(name, author, stock);
+    }
+
+    public Guid Id { get; private set; }
+
+    public string Name { get; private set; } = string.Empty;
+
+    public string Author { get; private set; } = string.Empty;
+
+    public int Stock { get; private set; }
+
+    public void Update(string name, string author, int stock)
+    {
         if (string.IsNullOrWhiteSpace(name))
         {
             throw new ArgumentException("Book name cannot be empty.", nameof(name));
@@ -28,19 +42,10 @@ public sealed class Book
             throw new ArgumentOutOfRangeException(nameof(stock), "Book stock cannot be negative.");
         }
 
-        Id = id;
         Name = name.Trim();
         Author = author.Trim();
         Stock = stock;
     }
-
-    public Guid Id { get; private set; }
-
-    public string Name { get; private set; } = string.Empty;
-
-    public string Author { get; private set; } = string.Empty;
-
-    public int Stock { get; private set; }
 
     public void DecreaseStock()
     {

@@ -98,7 +98,12 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     public async Task GetMyBooks_ReturnsOnlyCurrentUsersActiveBorrows()
     {
         using var client = factory.CreateApiClient();
-        var currentUserBookId = await SeedBookAsync(name: "Current User Book", stock: 2);
+        const string currentUserBookName = "Current User Book";
+        const string currentUserBookAuthor = "Current Author";
+        var currentUserBookId = await SeedBookAsync(
+            name: currentUserBookName,
+            author: currentUserBookAuthor,
+            stock: 2);
         var otherUserBookId = await SeedBookAsync(name: "Other User Book", stock: 2);
         var returnedBookId = await SeedBookAsync(name: "Returned Book", stock: 2);
 
@@ -115,7 +120,43 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.NotNull(borrowRecords);
         var borrowRecord = Assert.Single(borrowRecords);
         Assert.Equal(currentUserBookId, borrowRecord.BookId);
+        Assert.Equal(currentUserBookName, borrowRecord.BookName);
+        Assert.Equal(currentUserBookAuthor, borrowRecord.Author);
         Assert.Null(borrowRecord.ReturnedAt);
+    }
+
+    [Fact]
+    public async Task GetMyBooks_WithMultipleBooks_ReturnsBookDetailsWithoutDuplicates()
+    {
+        using var client = factory.CreateApiClient();
+        var firstBookId = await SeedBookAsync(
+            name: "Domain-Driven Design",
+            author: "Eric Evans",
+            stock: 2);
+        var secondBookId = await SeedBookAsync(
+            name: "Patterns of Enterprise Application Architecture",
+            author: "Martin Fowler",
+            stock: 2);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, firstBookId);
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, secondBookId);
+
+        var response = await client.GetAsync("/api/borrow/my-books");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        Assert.Equal(2, borrowRecords.Count);
+
+        var firstBorrowRecord = Assert.Single(borrowRecords, borrowRecord => borrowRecord.BookId == firstBookId);
+        var secondBorrowRecord = Assert.Single(borrowRecords, borrowRecord => borrowRecord.BookId == secondBookId);
+
+        Assert.Equal("Domain-Driven Design", firstBorrowRecord.BookName);
+        Assert.Equal("Eric Evans", firstBorrowRecord.Author);
+        Assert.Equal("Patterns of Enterprise Application Architecture", secondBorrowRecord.BookName);
+        Assert.Equal("Martin Fowler", secondBorrowRecord.Author);
     }
 
     [Fact]
@@ -206,5 +247,11 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         await dbContext.SaveChangesAsync();
     }
 
-    private sealed record BorrowRecordResponse(Guid Id, Guid BookId, DateTime BorrowedAt, DateTime? ReturnedAt);
+    private sealed record BorrowRecordResponse(
+        Guid Id,
+        Guid BookId,
+        string? BookName,
+        string? Author,
+        DateTime BorrowedAt,
+        DateTime? ReturnedAt);
 }

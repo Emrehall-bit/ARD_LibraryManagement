@@ -21,6 +21,12 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
             .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
     }
 
+    public async Task<Book?> GetTrackedByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Books
+            .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
+    }
+
     public async Task AddAsync(Book book, CancellationToken cancellationToken = default)
     {
         await dbContext.Books.AddAsync(book, cancellationToken);
