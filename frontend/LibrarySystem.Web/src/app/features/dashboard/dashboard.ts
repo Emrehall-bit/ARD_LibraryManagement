@@ -1,26 +1,16 @@
-import { Component } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { forkJoin, finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
-import { TagModule } from 'primeng/tag';
+import { MessageModule } from 'primeng/message';
+import { ProgressSpinnerModule } from 'primeng/progressspinner';
 
-interface BookPreview {
-  title: string;
-  author: string;
-  meta: string;
-  coverClass: string;
-}
-
-interface BorrowedPreview {
-  title: string;
-  author: string;
-  dateLabel: string;
-  date: string;
-  status: string;
-  severity: 'success' | 'warn' | 'info';
-  coverClass: string;
-}
+import { BorrowedBook } from '../borrowing/models/borrowed-book.model';
+import { BorrowingApiService } from '../borrowing/services/borrowing-api.service';
+import { Book } from '../books/models/book.model';
+import { BooksApiService } from '../books/services/books-api.service';
 
 interface SummaryItem {
   label: string;
@@ -31,87 +21,97 @@ interface SummaryItem {
 
 @Component({
   selector: 'app-dashboard',
-  imports: [ButtonModule, CardModule, InputTextModule, RouterLink, TagModule],
+  imports: [ButtonModule, CardModule, InputTextModule, MessageModule, ProgressSpinnerModule, RouterLink],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss'
 })
-export class DashboardComponent {
-  protected readonly popularBooks: BookPreview[] = [
-    { title: 'Nutuk', author: 'M. K. Atatürk', meta: '12 stokta', coverClass: 'cover--navy' },
-    { title: 'Şeker Portakalı', author: 'J. M. de Vasconcelos', meta: '8 stokta', coverClass: 'cover--gold' },
-    {
-      title: 'Saatleri Ayarlama Enstitüsü',
-      author: 'A. H. Tanpınar',
-      meta: '5 stokta',
-      coverClass: 'cover--teal'
-    },
-    { title: 'Ben, Robot', author: 'Isaac Asimov', meta: '9 stokta', coverClass: 'cover--clay' }
-  ];
+export class DashboardComponent implements OnInit {
+  private readonly booksApi = inject(BooksApiService);
+  private readonly borrowingApi = inject(BorrowingApiService);
+  private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
+  private readonly dateFormatter = new Intl.DateTimeFormat('tr-TR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 
-  protected readonly currentLoans: BorrowedPreview[] = [
+  protected readonly books = signal<Book[]>([]);
+  protected readonly borrowedBooks = signal<BorrowedBook[]>([]);
+  protected readonly isLoading = signal(false);
+  protected readonly errorMessage = signal<string | null>(null);
+
+  protected readonly catalogBooks = computed(() => this.books().slice(0, 4));
+  protected readonly recentBorrowedBooks = computed(() => this.borrowedBooks().slice(0, 3));
+
+  protected readonly summaryItems = computed<SummaryItem[]>(() => [
+    { label: 'Toplam Kitap', value: this.books().length.toString(), icon: 'pi pi-book', tone: 'gold' },
     {
-      title: 'Kürk Mantolu Madonna',
-      author: 'Sabahattin Ali',
-      dateLabel: 'Alış',
-      date: '14.08.2026',
-      status: 'Devam ediyor',
-      severity: 'info',
-      coverClass: 'cover--gold'
+      label: 'Mevcut Stok',
+      value: this.books().reduce((total, book) => total + book.stock, 0).toString(),
+      icon: 'pi pi-check-circle',
+      tone: 'teal'
     },
     {
-      title: '1984',
-      author: 'George Orwell',
-      dateLabel: 'Alış',
-      date: '10.08.2026',
-      status: 'Yakında',
-      severity: 'warn',
-      coverClass: 'cover--navy'
-    },
-    {
-      title: 'Dune',
-      author: 'Frank Herbert',
-      dateLabel: 'Alış',
-      date: '06.08.2026',
-      status: 'Zamanında',
-      severity: 'success',
-      coverClass: 'cover--clay'
+      label: 'Aktif Ödünçlerim',
+      value: this.borrowedBooks().length.toString(),
+      icon: 'pi pi-bookmark',
+      tone: 'gold'
     }
-  ];
+  ]);
 
-  protected readonly borrowedBooks: BorrowedPreview[] = [
-    {
-      title: 'Domain Driven Design',
-      author: 'Eric Evans',
-      dateLabel: 'Teslim',
-      date: '26.08.2026',
-      status: 'Aktif',
-      severity: 'info',
-      coverClass: 'cover--teal'
-    },
-    {
-      title: 'Refactoring',
-      author: 'Martin Fowler',
-      dateLabel: 'Teslim',
-      date: '23.08.2026',
-      status: 'Yakında',
-      severity: 'warn',
-      coverClass: 'cover--navy'
-    },
-    {
-      title: 'Clean Architecture',
-      author: 'Robert C. Martin',
-      dateLabel: 'Teslim',
-      date: '29.08.2026',
-      status: 'Aktif',
-      severity: 'success',
-      coverClass: 'cover--gold'
-    }
-  ];
+  ngOnInit(): void {
+    this.loadDashboardData();
+  }
 
-  // Mock values for the visual dashboard shell; real metrics will come from the API later.
-  protected readonly summaryItems: SummaryItem[] = [
-    { label: 'Toplam Kitap', value: '1.248', icon: 'pi pi-book', tone: 'gold' },
-    { label: 'Stokta Bulunan', value: '932', icon: 'pi pi-check-circle', tone: 'teal' },
-    { label: 'Aktif Ödünç', value: '27', icon: 'pi pi-bookmark', tone: 'gold' }
-  ];
+  protected getBookCoverClass(book: Book): string {
+    return this.getCoverClass(`${book.id}${book.name}`);
+  }
+
+  protected getBorrowedCoverClass(item: BorrowedBook): string {
+    return this.getCoverClass(`${item.bookId}${item.bookName ?? ''}`);
+  }
+
+  protected getStockLabel(stock: number): string {
+    return stock > 0 ? `${stock} stokta` : 'Stokta yok';
+  }
+
+  protected getBorrowedBookName(item: BorrowedBook): string {
+    return item.bookName ?? 'Kitap adı bulunamadı';
+  }
+
+  protected getBorrowedAuthor(item: BorrowedBook): string {
+    return item.author ?? 'Yazar bilgisi bulunamadı';
+  }
+
+  protected getBorrowedAtLabel(item: BorrowedBook): string {
+    return this.dateFormatter.format(new Date(item.borrowedAt));
+  }
+
+  private loadDashboardData(): void {
+    this.isLoading.set(true);
+    this.errorMessage.set(null);
+
+    forkJoin({
+      books: this.booksApi.getAll(),
+      borrowedBooks: this.borrowingApi.getMyBooks()
+    })
+      .pipe(finalize(() => this.isLoading.set(false)))
+      .subscribe({
+        next: ({ books, borrowedBooks }) => {
+          this.books.set(books);
+          this.borrowedBooks.set(borrowedBooks);
+        },
+        error: () => {
+          this.errorMessage.set('Dashboard verileri yüklenirken bir hata oluştu.');
+        }
+      });
+  }
+
+  private getCoverClass(source: string): string {
+    const hash = Array.from(source).reduce((total, character) => total + character.charCodeAt(0), 0);
+
+    return `cover--${this.coverTones[hash % this.coverTones.length]}`;
+  }
 }

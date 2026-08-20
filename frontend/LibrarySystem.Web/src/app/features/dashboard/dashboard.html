@@ -15,122 +15,153 @@
     </div>
   </div>
 
-  <div class="grid dashboard__grid">
-    <div class="col-12 xl:col-8">
-      <p-card styleClass="dashboard-card dashboard-card--popular">
-        <ng-template #title>
-          <span class="dashboard-card__title">Popüler Kitaplar</span>
-        </ng-template>
-        <ng-template #content>
-          <div class="popular-books">
-            @for (book of popularBooks; track book.title) {
-              <article class="popular-book">
-                <div class="book-cover {{ book.coverClass }}">
-                  <span>{{ book.title }}</span>
-                </div>
-                <h3>{{ book.title }}</h3>
-                <p>{{ book.author }}</p>
-                <small>{{ book.meta }}</small>
-              </article>
-            }
-          </div>
-        </ng-template>
-      </p-card>
+  @if (isLoading()) {
+    <div class="dashboard__state dashboard__state--loading flex flex-column align-items-center justify-content-center">
+      <p-progress-spinner ariaLabel="Dashboard verileri yükleniyor" />
+      <span>Dashboard verileri yükleniyor...</span>
     </div>
-
-    <div class="col-12 xl:col-4">
-      <p-card styleClass="dashboard-card dashboard-card--compact">
-        <ng-template #title>
-          <span class="dashboard-card__title">Mevcut Ödünçler</span>
-        </ng-template>
-        <ng-template #content>
-          <div class="loan-list">
-            @for (loan of currentLoans; track loan.title) {
-              <article class="loan-row flex align-items-center gap-3">
-                <div class="mini-cover {{ loan.coverClass }}"></div>
-                <div class="loan-row__body">
-                  <strong>{{ loan.title }}</strong>
-                  <span>{{ loan.author }}</span>
-                  <small>{{ loan.dateLabel }}: {{ loan.date }}</small>
-                </div>
-                <p-tag [value]="loan.status" [severity]="loan.severity" />
-              </article>
-            }
-          </div>
-        </ng-template>
-      </p-card>
-    </div>
-
-    <div class="col-12 xl:col-8">
-      <p-card styleClass="dashboard-card">
-        <ng-template #title>
-          <span class="dashboard-card__title">Mevcut Ödünç Aldıklarım</span>
-        </ng-template>
-        <ng-template #content>
-          <div class="loan-list loan-list--wide">
-            @for (book of borrowedBooks; track book.title) {
-              <article class="loan-row loan-row--wide grid align-items-center">
-                <div class="col-12 md:col-7 flex align-items-center gap-3">
-                  <div class="mini-cover {{ book.coverClass }}"></div>
-                  <div class="loan-row__body">
-                    <strong>{{ book.title }}</strong>
-                    <span>{{ book.author }}</span>
-                  </div>
-                </div>
-                <div class="col-7 md:col-3">
-                  <small>{{ book.dateLabel }}</small>
-                  <span>{{ book.date }}</span>
-                </div>
-                <div class="col-5 md:col-2 text-right">
-                  <p-tag [value]="book.status" [severity]="book.severity" />
-                </div>
-              </article>
-            }
-          </div>
-        </ng-template>
-      </p-card>
-    </div>
-
-    <div class="col-12 xl:col-4">
-      <div class="right-stack flex flex-column gap-3">
-        <p-card styleClass="dashboard-card dashboard-card--compact">
+  } @else if (errorMessage()) {
+    <p-message severity="error" size="small" class="dashboard__message">
+      {{ errorMessage() }}
+    </p-message>
+  } @else {
+    <div class="grid dashboard__grid">
+      <div class="col-12 xl:col-8">
+        <p-card styleClass="dashboard-card dashboard-card--popular">
           <ng-template #title>
-            <span class="dashboard-card__title">Hızlı İşlemler</span>
+            <span class="dashboard-card__title">Katalogdan Kitaplar</span>
           </ng-template>
           <ng-template #content>
-            <div class="quick-actions flex flex-wrap gap-2">
-              <p-button label="Kitaplara Git" icon="pi pi-book" routerLink="/books" styleClass="quick-action-button" />
-              <p-button label="İade İşlemleri" icon="pi pi-refresh" severity="secondary" styleClass="quick-action-button" />
-              <p-button
-                label="Ödünç Aldıklarım"
-                icon="pi pi-bookmark"
-                routerLink="/my-books"
-                severity="secondary"
-                styleClass="quick-action-button"
-              />
-            </div>
-          </ng-template>
-        </p-card>
-
-        <p-card styleClass="dashboard-card dashboard-card--compact">
-          <ng-template #title>
-            <span class="dashboard-card__title">Kütüphane İstatistikleri</span>
-          </ng-template>
-          <ng-template #content>
-            <div class="summary-grid grid">
-              @for (item of summaryItems; track item.label) {
-                <div class="col-12 md:col-4">
-                  <article class="summary-card summary-card--{{ item.tone }}">
-                    <i [class]="item.icon"></i>
-                    <small>{{ item.label }}</small>
-                    <strong>{{ item.value }}</strong>
+            @if (catalogBooks().length === 0) {
+              <div class="dashboard-empty">
+                <i class="pi pi-book"></i>
+                <strong>Henüz kayıtlı kitap bulunmuyor.</strong>
+              </div>
+            } @else {
+              <div class="popular-books">
+                @for (book of catalogBooks(); track book.id) {
+                  <article class="popular-book">
+                    <div class="book-cover {{ getBookCoverClass(book) }}">
+                      <span>{{ book.name }}</span>
+                    </div>
+                    <h3>{{ book.name }}</h3>
+                    <p>{{ book.author }}</p>
+                    <small>{{ getStockLabel(book.stock) }}</small>
                   </article>
-                </div>
-              }
-            </div>
+                }
+              </div>
+            }
           </ng-template>
         </p-card>
       </div>
+
+      <div class="col-12 xl:col-4">
+        <p-card styleClass="dashboard-card dashboard-card--compact">
+          <ng-template #title>
+            <span class="dashboard-card__title">Mevcut Ödünçler</span>
+          </ng-template>
+          <ng-template #content>
+            @if (recentBorrowedBooks().length === 0) {
+              <div class="dashboard-empty dashboard-empty--compact">
+                <i class="pi pi-bookmark"></i>
+                <strong>Aktif ödünç kitabınız bulunmuyor.</strong>
+              </div>
+            } @else {
+              <div class="loan-list">
+                @for (loan of recentBorrowedBooks(); track loan.id) {
+                  <article class="loan-row flex align-items-center gap-3">
+                    <div class="mini-cover {{ getBorrowedCoverClass(loan) }}"></div>
+                    <div class="loan-row__body">
+                      <strong>{{ getBorrowedBookName(loan) }}</strong>
+                      <span>{{ getBorrowedAuthor(loan) }}</span>
+                      <small>Alış: {{ getBorrowedAtLabel(loan) }}</small>
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          </ng-template>
+        </p-card>
+      </div>
+
+      <div class="col-12 xl:col-8">
+        <p-card styleClass="dashboard-card">
+          <ng-template #title>
+            <div class="dashboard-card__title-row flex align-items-center justify-content-between gap-2">
+              <span class="dashboard-card__title">Mevcut Ödünç Aldıklarım</span>
+              <p-button label="Tümünü Gör" icon="pi pi-arrow-right" size="small" [text]="true" routerLink="/my-books" />
+            </div>
+          </ng-template>
+          <ng-template #content>
+            @if (recentBorrowedBooks().length === 0) {
+              <div class="dashboard-empty">
+                <i class="pi pi-bookmark"></i>
+                <strong>Aktif ödünç kitabınız bulunmuyor.</strong>
+              </div>
+            } @else {
+              <div class="loan-list loan-list--wide">
+                @for (book of recentBorrowedBooks(); track book.id) {
+                  <article class="loan-row loan-row--wide grid align-items-center">
+                    <div class="col-12 md:col-8 flex align-items-center gap-3">
+                      <div class="mini-cover {{ getBorrowedCoverClass(book) }}"></div>
+                      <div class="loan-row__body">
+                        <strong>{{ getBorrowedBookName(book) }}</strong>
+                        <span>{{ getBorrowedAuthor(book) }}</span>
+                      </div>
+                    </div>
+                    <div class="col-12 md:col-4">
+                      <small>Ödünç alma tarihi</small>
+                      <span>{{ getBorrowedAtLabel(book) }}</span>
+                    </div>
+                  </article>
+                }
+              </div>
+            }
+          </ng-template>
+        </p-card>
+      </div>
+
+      <div class="col-12 xl:col-4">
+        <div class="right-stack flex flex-column gap-3">
+          <p-card styleClass="dashboard-card dashboard-card--compact">
+            <ng-template #title>
+              <span class="dashboard-card__title">Hızlı İşlemler</span>
+            </ng-template>
+            <ng-template #content>
+              <div class="quick-actions flex flex-wrap gap-2">
+                <p-button label="Kitaplara Git" icon="pi pi-book" routerLink="/books" styleClass="quick-action-button" />
+                <p-button label="İade İşlemleri" icon="pi pi-refresh" routerLink="/my-books" severity="secondary" styleClass="quick-action-button" />
+                <p-button
+                  label="Ödünç Aldıklarım"
+                  icon="pi pi-bookmark"
+                  routerLink="/my-books"
+                  severity="secondary"
+                  styleClass="quick-action-button"
+                />
+              </div>
+            </ng-template>
+          </p-card>
+
+          <p-card styleClass="dashboard-card dashboard-card--compact">
+            <ng-template #title>
+              <span class="dashboard-card__title">Kütüphane İstatistikleri</span>
+            </ng-template>
+            <ng-template #content>
+              <div class="summary-grid grid">
+                @for (item of summaryItems(); track item.label) {
+                  <div class="col-12 md:col-4">
+                    <article class="summary-card summary-card--{{ item.tone }}">
+                      <i [class]="item.icon"></i>
+                      <small>{{ item.label }}</small>
+                      <strong>{{ item.value }}</strong>
+                    </article>
+                  </div>
+                }
+              </div>
+            </ng-template>
+          </p-card>
+        </div>
+      </div>
     </div>
-  </div>
+  }
 </section>

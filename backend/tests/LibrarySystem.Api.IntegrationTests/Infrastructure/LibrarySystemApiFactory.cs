@@ -96,6 +96,9 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
                 identity."AspNetUserTokens",
                 identity."AspNetUserLogins",
                 identity."AspNetUserClaims",
+                identity."AspNetUserRoles",
+                identity."AspNetRoleClaims",
+                identity."AspNetRoles",
                 identity."AspNetUsers";
             """;
 
