@@ -13,11 +13,13 @@ namespace LibrarySystem.Modules.Books.Presentation;
 public sealed class BooksController(IBookService bookService) : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType(typeof(IReadOnlyList<BookResponseDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<IReadOnlyList<BookResponseDto>>> GetAll(
+    [ProducesResponseType(typeof(PagedBooksResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PagedBooksResponseDto>> GetAll(
+        [FromQuery] GetBooksQueryDto query,
         CancellationToken cancellationToken)
     {
-        var books = await bookService.GetAllAsync(cancellationToken);
+        var books = await bookService.GetAllAsync(query, cancellationToken);
 
         return Ok(books);
     }

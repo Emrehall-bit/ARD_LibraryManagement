@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
+using LibrarySystem.Modules.Books.Domain;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Identity.Domain;
 using LibrarySystem.Shared.Authentication;
@@ -44,10 +45,157 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var books = await response.Content.ReadFromJsonAsync<List<BookResponse>>();
+        var books = await response.Content.ReadFromJsonAsync<PagedBooksResponse>();
 
         Assert.NotNull(books);
-        Assert.Empty(books);
+        Assert.Empty(books.Items);
+        Assert.Equal(1, books.Page);
+        Assert.Equal(20, books.PageSize);
+        Assert.Equal(0, books.TotalCount);
+        Assert.Equal(0, books.TotalPages);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithDefaultQuery_ReturnsFirstPageWithDefaultPageSize()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBooksAsync(25);
+
+        var response = await client.GetAsync("/api/books");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(1, page.Page);
+        Assert.Equal(20, page.PageSize);
+        Assert.Equal(25, page.TotalCount);
+        Assert.Equal(2, page.TotalPages);
+        Assert.Equal(20, page.Items.Count);
+        Assert.Equal("Book 001", page.Items[0].Name);
+        Assert.Equal("Book 020", page.Items[^1].Name);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithPageTwo_ReturnsSecondPage()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBooksAsync(25);
+
+        var response = await client.GetAsync("/api/books?page=2&pageSize=20");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.Page);
+        Assert.Equal(20, page.PageSize);
+        Assert.Equal(25, page.TotalCount);
+        Assert.Equal(2, page.TotalPages);
+        Assert.Equal(5, page.Items.Count);
+        Assert.Equal("Book 021", page.Items[0].Name);
+        Assert.Equal("Book 025", page.Items[^1].Name);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCustomPageSize_ReturnsRequestedPageSize()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBooksAsync(12);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=5");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(1, page.Page);
+        Assert.Equal(5, page.PageSize);
+        Assert.Equal(12, page.TotalCount);
+        Assert.Equal(3, page.TotalPages);
+        Assert.Equal(5, page.Items.Count);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithSearchByName_ReturnsMatchingBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Foundation Patterns", "Test Author", 2);
+        await SeedBookAsync("Clean Code", "Robert Martin", 2);
+
+        var response = await client.GetAsync("/api/books?search=Foundation");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Foundation Patterns", book.Name);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithSearchByAuthor_ReturnsMatchingBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Book A", "Isaac Field", 2);
+        await SeedBookAsync("Book B", "Another Author", 2);
+
+        var response = await client.GetAsync("/api/books?search=Isaac");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Isaac Field", book.Author);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithSearch_IsCaseInsensitive()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Mixed Case Catalogue", "Search Author", 2);
+
+        var response = await client.GetAsync("/api/books?search=mIxEd");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Mixed Case Catalogue", book.Name);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithWhitespaceSearch_DoesNotFilter()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBooksAsync(25);
+
+        var response = await client.GetAsync("/api/books?search=%20%20%20");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(25, page.TotalCount);
+        Assert.Equal(20, page.Items.Count);
+    }
+
+    [Theory]
+    [InlineData("/api/books?page=0")]
+    [InlineData("/api/books?pageSize=0")]
+    [InlineData("/api/books?pageSize=101")]
+    public async Task GetBooks_WithInvalidPagination_ReturnsBadRequest(string url)
+    {
+        using var client = factory.CreateApiClient();
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]
@@ -277,6 +425,30 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         return book ?? throw new InvalidOperationException("Create book response body was empty.");
     }
 
+    private async Task SeedBooksAsync(int count)
+    {
+        for (var index = 1; index <= count; index++)
+        {
+            await SeedBookAsync($"Book {index:000}", $"Author {index:000}", index % 5);
+        }
+    }
+
+    private async Task SeedBookAsync(string name, string author, int stock)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var book = new Book(Guid.NewGuid(), name, author, stock);
+
+        await dbContext.Books.AddAsync(book);
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<PagedBooksResponse> ReadPagedBooksResponseAsync(HttpResponseMessage response)
+    {
+        return await response.Content.ReadFromJsonAsync<PagedBooksResponse>()
+            ?? throw new InvalidOperationException("Paged books response body was empty.");
+    }
+
     private async Task<HttpClient> CreateAuthenticatedJwtClientAsync(string role)
     {
         var credentials = CreateUserCredentials();
@@ -356,6 +528,13 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     private sealed record UpdateBookRequest(string Name, string Author, int Stock);
 
     private sealed record BookResponse(Guid Id, string Name, string Author, int Stock);
+
+    private sealed record PagedBooksResponse(
+        IReadOnlyList<BookResponse> Items,
+        int Page,
+        int PageSize,
+        int TotalCount,
+        int TotalPages);
 
     private sealed record RegisterRequest(string Username, string Email, string Password);
 

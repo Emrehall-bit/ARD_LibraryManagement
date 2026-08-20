@@ -1,10 +1,15 @@
 using LibrarySystem.Modules.Books.Domain;
+using LibrarySystem.Modules.Books.Application.Models;
 
 namespace LibrarySystem.Modules.Books.Application.Interfaces;
 
 public interface IBookRepository
 {
-    Task<IReadOnlyList<Book>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<BookPage> GetPageAsync(
+        int page,
+        int pageSize,
+        string? search,
+        CancellationToken cancellationToken = default);
 
     Task<Book?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 

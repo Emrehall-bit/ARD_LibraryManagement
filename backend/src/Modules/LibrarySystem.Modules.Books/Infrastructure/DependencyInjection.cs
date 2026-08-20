@@ -28,6 +28,7 @@ public static class DependencyInjection
         services.AddScoped<IBookService, BookService>();
         services.AddScoped<IBookInventoryService, BookInventoryService>();
         services.AddScoped<IBookLookupService, BookLookupService>();
+        services.AddScoped<IValidator<GetBooksQueryDto>, GetBooksQueryValidator>();
         services.AddScoped<IValidator<CreateBookRequestDto>, CreateBookRequestValidator>();
         services.AddScoped<IValidator<UpdateBookRequestDto>, UpdateBookRequestValidator>();
 

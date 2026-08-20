@@ -8,14 +8,34 @@ namespace LibrarySystem.Modules.Books.Application.Services;
 
 internal sealed class BookService(
     IBookRepository bookRepository,
+    IValidator<GetBooksQueryDto> getBooksQueryValidator,
     IValidator<CreateBookRequestDto> createBookRequestValidator,
     IValidator<UpdateBookRequestDto> updateBookRequestValidator) : IBookService
 {
-    public async Task<IReadOnlyList<BookResponseDto>> GetAllAsync(CancellationToken cancellationToken = default)
+    public async Task<PagedBooksResponseDto> GetAllAsync(
+        GetBooksQueryDto query,
+        CancellationToken cancellationToken = default)
     {
-        var books = await bookRepository.GetAllAsync(cancellationToken);
+        await getBooksQueryValidator.ValidateAndThrowAsync(query, cancellationToken);
 
-        return books.Select(MapToResponseDto).ToList();
+        var trimmedSearch = string.IsNullOrWhiteSpace(query.Search)
+            ? null
+            : query.Search.Trim();
+        var page = await bookRepository.GetPageAsync(
+            query.Page,
+            query.PageSize,
+            trimmedSearch,
+            cancellationToken);
+        var totalPages = page.TotalCount == 0
+            ? 0
+            : (int)Math.Ceiling(page.TotalCount / (double)page.PageSize);
+
+        return new PagedBooksResponseDto(
+            page.Items.Select(MapToResponseDto).ToList(),
+            page.Page,
+            page.PageSize,
+            page.TotalCount,
+            totalPages);
     }
 
     public async Task<BookResponseDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

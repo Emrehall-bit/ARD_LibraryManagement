@@ -4,7 +4,9 @@ namespace LibrarySystem.Modules.Books.Application.Interfaces;
 
 public interface IBookService
 {
-    Task<IReadOnlyList<BookResponseDto>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedBooksResponseDto> GetAllAsync(
+        GetBooksQueryDto query,
+        CancellationToken cancellationToken = default);
 
     Task<BookResponseDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
