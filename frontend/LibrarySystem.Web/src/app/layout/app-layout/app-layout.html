@@ -1,0 +1,22 @@
+<div class="app-shell">
+  <app-topbar (menuClick)="openSidebar()" />
+
+  <div class="app-shell__body">
+    <aside class="app-shell__sidebar" aria-label="Ana navigasyon">
+      <app-sidebar />
+    </aside>
+
+    <main class="app-shell__content">
+      <router-outlet></router-outlet>
+    </main>
+  </div>
+
+  <p-drawer
+    [(visible)]="sidebarVisible"
+    styleClass="app-mobile-drawer"
+    position="left"
+    [showCloseIcon]="false"
+  >
+    <app-sidebar />
+  </p-drawer>
+</div>

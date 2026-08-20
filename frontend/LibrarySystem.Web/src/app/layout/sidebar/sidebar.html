@@ -1,0 +1,15 @@
+<nav class="sidebar flex flex-column" aria-label="Ana menü">
+  <div class="sidebar__section">
+    @for (item of items; track item.route) {
+      <a
+        class="sidebar__item flex align-items-center gap-2"
+        [routerLink]="item.route"
+        routerLinkActive="sidebar__item--active"
+        [routerLinkActiveOptions]="{ exact: true }"
+      >
+        <i [class]="item.icon"></i>
+        <span>{{ item.label }}</span>
+      </a>
+    }
+  </div>
+</nav>

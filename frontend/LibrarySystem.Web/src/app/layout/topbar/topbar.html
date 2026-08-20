@@ -1,0 +1,41 @@
+<header class="topbar flex align-items-center justify-content-between">
+  <div class="topbar__brand flex align-items-center gap-2">
+    <p-button
+      class="topbar__menu"
+      icon="pi pi-bars"
+      severity="secondary"
+      [rounded]="true"
+      [text]="true"
+      ariaLabel="Menüyü aç"
+      (onClick)="menuClick.emit()"
+    />
+
+    <span class="topbar__brand-icon flex align-items-center justify-content-center">
+      <i class="pi pi-book"></i>
+    </span>
+    <span class="topbar__brand-text">Kütüphanem</span>
+  </div>
+
+  <div class="topbar__actions flex align-items-center gap-1">
+    <p-button
+      icon="pi pi-bell"
+      severity="secondary"
+      [rounded]="true"
+      [text]="true"
+      ariaLabel="Bildirimler"
+    />
+    <p-button
+      icon="pi pi-cog"
+      severity="secondary"
+      [rounded]="true"
+      [text]="true"
+      ariaLabel="Ayarlar"
+    />
+
+    <div class="topbar__user flex align-items-center gap-2">
+      <span class="topbar__avatar flex align-items-center justify-content-center">K</span>
+      <span class="topbar__username">Kullanıcı</span>
+      <i class="pi pi-angle-down topbar__chevron"></i>
+    </div>
+  </div>
+</header>

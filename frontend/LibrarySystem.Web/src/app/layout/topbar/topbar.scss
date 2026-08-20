@@ -1,0 +1,103 @@
+:host {
+  display: block;
+}
+
+.topbar {
+  height: var(--app-topbar-height);
+  padding: 0 1.25rem;
+  background: linear-gradient(90deg, var(--app-primary-dark), var(--app-primary));
+  color: #ffffff;
+  box-shadow: var(--app-shadow);
+}
+
+.topbar__brand-icon {
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--app-accent);
+}
+
+.topbar__brand-text {
+  font-size: 1.0625rem;
+  font-weight: 700;
+}
+
+.topbar__menu {
+  display: none;
+}
+
+:host ::ng-deep .topbar__menu .p-button,
+:host ::ng-deep .topbar__actions .p-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+}
+
+:host ::ng-deep .topbar__actions .p-button {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+:host ::ng-deep .topbar__actions .p-button:hover,
+:host ::ng-deep .topbar__menu .p-button:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.topbar__user {
+  min-height: 2.375rem;
+  margin-left: 0.25rem;
+  padding: 0.1875rem 0.5rem 0.1875rem 0.1875rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.topbar__avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--app-accent);
+  color: var(--app-primary-dark);
+  font-weight: 700;
+}
+
+.topbar__username {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.topbar__chevron {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+@media (max-width: 991px) {
+  .topbar {
+    height: var(--app-topbar-height-mobile);
+    padding: 0 1rem;
+  }
+
+  .topbar__menu {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 575px) {
+  .topbar__brand {
+    gap: 0.75rem !important;
+  }
+
+  .topbar__brand-icon {
+    width: 2rem;
+    height: 2rem;
+  }
+
+  .topbar__brand-text {
+    font-size: 1rem;
+  }
+
+  .topbar__username,
+  .topbar__chevron {
+    display: none;
+  }
+}
