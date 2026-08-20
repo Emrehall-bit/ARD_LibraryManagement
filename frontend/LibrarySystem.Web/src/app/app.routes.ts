@@ -28,7 +28,7 @@ export const routes: Routes = [
       },
       {
         path: 'books',
-        children: []
+        loadComponent: () => import('./features/books/books-page/books-page').then((component) => component.BooksPageComponent)
       },
       {
         path: 'my-books',

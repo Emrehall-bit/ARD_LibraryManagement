@@ -1,0 +1,66 @@
+<section class="books-page">
+  <div class="books-page__header grid align-items-center">
+    <div class="col-12 lg:col-5">
+      <h1>Katalog</h1>
+      <p>Kütüphanedeki kitapları görüntüleyin.</p>
+    </div>
+
+    <div class="col-12 lg:col-7">
+      <label class="books-page__search flex align-items-center ml-auto">
+        <i class="pi pi-search"></i>
+        <input
+          pInputText
+          type="search"
+          placeholder="Kitap adı veya yazar ara..."
+          aria-label="Kitap adı veya yazar ara"
+          [value]="searchTerm()"
+          (input)="updateSearchTerm($any($event.target).value)"
+        />
+      </label>
+    </div>
+  </div>
+
+  @if (isLoading()) {
+    <div class="books-page__state books-page__state--loading flex flex-column align-items-center justify-content-center">
+      <p-progress-spinner ariaLabel="Kitaplar yükleniyor" />
+      <span>Kitaplar yükleniyor...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <p-message severity="error" size="small" class="books-page__message">
+      {{ errorMessage() }}
+    </p-message>
+  } @else if (books().length === 0) {
+    <div class="books-page__state">
+      <i class="pi pi-book"></i>
+      <strong>Henüz kayıtlı kitap bulunmuyor.</strong>
+    </div>
+  } @else if (filteredBooks().length === 0) {
+    <div class="books-page__state">
+      <i class="pi pi-search"></i>
+      <strong>Aramanızla eşleşen kitap bulunamadı.</strong>
+    </div>
+  } @else {
+    <div class="grid books-page__grid">
+      @for (book of filteredBooks(); track book.id) {
+        <div class="col-12 sm:col-6 lg:col-4 xl:col-3">
+          <p-card styleClass="book-card">
+            <ng-template #content>
+              <article class="book-card__content">
+                <div class="book-cover {{ getCoverClass(book) }}">
+                  <span>{{ book.name }}</span>
+                </div>
+
+                <div class="book-card__body">
+                  <h2>{{ book.name }}</h2>
+                  <p>{{ book.author }}</p>
+                </div>
+
+                <p-tag [value]="getStockLabel(book.stock)" [severity]="getStockSeverity(book.stock)" />
+              </article>
+            </ng-template>
+          </p-card>
+        </div>
+      }
+    </div>
+  }
+</section>
