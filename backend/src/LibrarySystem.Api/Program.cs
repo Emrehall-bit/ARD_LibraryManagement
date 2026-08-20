@@ -78,6 +78,8 @@ builder.Services.AddIdentityInfrastructure(databaseConnectionString, builder.Con
 
 var app = builder.Build();
 
+await app.Services.SeedIdentityAsync();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

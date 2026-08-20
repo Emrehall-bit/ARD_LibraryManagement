@@ -5,7 +5,9 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
+using LibrarySystem.Modules.Identity.Domain;
 using LibrarySystem.Modules.Identity.Infrastructure;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -48,6 +50,67 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
         Assert.Equal(request.Email, user.Email);
         Assert.False(string.IsNullOrWhiteSpace(user.PasswordHash));
         Assert.NotEqual(request.Password, user.PasswordHash);
+
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        Assert.True(await userManager.IsInRoleAsync(user, IdentityRoles.Member));
+    }
+
+    [Fact]
+    public async Task Startup_SeedsIdentityRoles()
+    {
+        using var scope = factory.Services.CreateScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+
+        Assert.True(await roleManager.RoleExistsAsync(IdentityRoles.Admin));
+        Assert.True(await roleManager.RoleExistsAsync(IdentityRoles.Member));
+    }
+
+    [Fact]
+    public async Task SeedIdentityAsync_WhenRunRepeatedly_DoesNotCreateDuplicateRoles()
+    {
+        await factory.Services.SeedIdentityAsync();
+        await factory.Services.SeedIdentityAsync();
+
+        using var scope = factory.Services.CreateScope();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+
+        var adminRoleCount = await roleManager.Roles.CountAsync(role => role.Name == IdentityRoles.Admin);
+        var memberRoleCount = await roleManager.Roles.CountAsync(role => role.Name == IdentityRoles.Member);
+
+        Assert.Equal(1, adminRoleCount);
+        Assert.Equal(1, memberRoleCount);
+    }
+
+    [Fact]
+    public async Task SeedIdentityAsync_AssignsMemberRoleToUsersWithoutRoles()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var request = CreateRegisterRequest();
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = request.Username,
+                Email = request.Email
+            };
+
+            var createResult = await userManager.CreateAsync(user, request.Password);
+
+            Assert.True(createResult.Succeeded);
+            Assert.Empty(await userManager.GetRolesAsync(user));
+        }
+
+        await factory.Services.SeedIdentityAsync();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.Users.SingleAsync(user => user.UserName != null);
+
+            Assert.True(await userManager.IsInRoleAsync(user, IdentityRoles.Member));
+        }
     }
 
     [Fact]

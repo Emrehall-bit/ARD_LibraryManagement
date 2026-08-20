@@ -51,15 +51,7 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
     public async Task InitializeAsync()
     {
         await EnsureTestDatabaseExistsAsync();
-
-        using var scope = Services.CreateScope();
-        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
-        var identityDbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
-
-        await identityDbContext.Database.MigrateAsync();
-        await booksDbContext.Database.MigrateAsync();
-        await borrowingDbContext.Database.MigrateAsync();
+        await MigrateTestDatabaseAsync();
         await ResetDataAsync();
     }
 
@@ -97,8 +89,6 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
                 identity."AspNetUserLogins",
                 identity."AspNetUserClaims",
                 identity."AspNetUserRoles",
-                identity."AspNetRoleClaims",
-                identity."AspNetRoles",
                 identity."AspNetUsers";
             """;
 
@@ -203,6 +193,48 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
         createCommand.CommandText = $"CREATE DATABASE {QuoteIdentifier(databaseName!)};";
 
         await createCommand.ExecuteNonQueryAsync();
+    }
+
+    private async Task MigrateTestDatabaseAsync()
+    {
+        var identityOptions = new DbContextOptionsBuilder<IdentityDbContext>()
+            .UseNpgsql(connectionString, npgsqlOptions =>
+            {
+                npgsqlOptions.MigrationsAssembly(typeof(IdentityDbContext).Assembly.FullName);
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
+            })
+            .Options;
+
+        await using (var identityDbContext = new IdentityDbContext(identityOptions))
+        {
+            await identityDbContext.Database.MigrateAsync();
+        }
+
+        var booksOptions = new DbContextOptionsBuilder<BooksDbContext>()
+            .UseNpgsql(connectionString, npgsqlOptions =>
+            {
+                npgsqlOptions.MigrationsAssembly(typeof(BooksDbContext).Assembly.FullName);
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "books");
+            })
+            .Options;
+
+        await using (var booksDbContext = new BooksDbContext(booksOptions))
+        {
+            await booksDbContext.Database.MigrateAsync();
+        }
+
+        var borrowingOptions = new DbContextOptionsBuilder<BorrowingDbContext>()
+            .UseNpgsql(connectionString, npgsqlOptions =>
+            {
+                npgsqlOptions.MigrationsAssembly(typeof(BorrowingDbContext).Assembly.FullName);
+                npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "borrowing");
+            })
+            .Options;
+
+        await using (var borrowingDbContext = new BorrowingDbContext(borrowingOptions))
+        {
+            await borrowingDbContext.Database.MigrateAsync();
+        }
     }
 
     private static string CreateTestConnectionString()
