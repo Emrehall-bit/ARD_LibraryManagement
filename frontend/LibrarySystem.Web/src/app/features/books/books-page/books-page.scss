@@ -64,7 +64,7 @@ h1 {
 .book-card__content {
   display: flex;
   height: 100%;
-  min-height: 17.25rem;
+  min-height: 20rem;
   flex-direction: column;
   align-items: center;
   text-align: center;
@@ -143,6 +143,21 @@ h1 {
   width: 100%;
   min-height: 2.25rem;
   margin-top: 0.7rem;
+}
+
+.book-card__manage-actions {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.book-card__manage-actions p-button {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.book-card__manage-button {
+  width: 100%;
+  min-height: 2.15rem;
 }
 
 .books-page__state {

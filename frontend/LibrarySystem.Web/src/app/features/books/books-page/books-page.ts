@@ -1,9 +1,10 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { MessageService } from 'primeng/api';
+import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
+import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
@@ -16,16 +17,19 @@ import { finalize } from 'rxjs';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { Book } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
+import { UpdateBookRequest } from '../models/update-book-request.model';
 import { BooksApiService } from '../services/books-api.service';
 
 type StockSeverity = 'success' | 'danger';
 type CreateBookControlName = 'name' | 'author' | 'stock';
+type EditBookControlName = 'name' | 'author' | 'stock';
 
 @Component({
   selector: 'app-books-page',
   imports: [
     ButtonModule,
     CardModule,
+    ConfirmDialogModule,
     DialogModule,
     InputNumberModule,
     InputTextModule,
@@ -35,13 +39,14 @@ type CreateBookControlName = 'name' | 'author' | 'stock';
     TagModule,
     ToastModule
   ],
-  providers: [MessageService],
+  providers: [ConfirmationService, MessageService],
   templateUrl: './books-page.html',
   styleUrl: './books-page.scss'
 })
 export class BooksPageComponent implements OnInit {
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
+  private readonly confirmationService = inject(ConfirmationService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly messageService = inject(MessageService);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
@@ -54,8 +59,19 @@ export class BooksPageComponent implements OnInit {
   protected readonly isCreateDialogVisible = signal(false);
   protected readonly isCreating = signal(false);
   protected readonly createErrorMessage = signal<string | null>(null);
+  protected readonly selectedBook = signal<Book | null>(null);
+  protected readonly isEditDialogVisible = signal(false);
+  protected readonly isUpdating = signal(false);
+  protected readonly editErrorMessage = signal<string | null>(null);
+  protected readonly deletingBookId = signal<string | null>(null);
 
   protected readonly createBookForm = this.formBuilder.nonNullable.group({
+    name: ['', [Validators.required, Validators.maxLength(200)]],
+    author: ['', [Validators.required, Validators.maxLength(200)]],
+    stock: [0, [Validators.required, Validators.min(0)]]
+  });
+
+  protected readonly editBookForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
     author: ['', [Validators.required, Validators.maxLength(200)]],
     stock: [0, [Validators.required, Validators.min(0)]]
@@ -98,6 +114,30 @@ export class BooksPageComponent implements OnInit {
     this.resetCreateForm();
   }
 
+  protected openEditDialog(book: Book): void {
+    if (this.isDeleting(book.id)) {
+      return;
+    }
+
+    this.selectedBook.set(book);
+    this.editErrorMessage.set(null);
+    this.editBookForm.reset({
+      name: book.name,
+      author: book.author,
+      stock: book.stock
+    });
+    this.isEditDialogVisible.set(true);
+  }
+
+  protected closeEditDialog(): void {
+    if (this.isUpdating()) {
+      return;
+    }
+
+    this.isEditDialogVisible.set(false);
+    this.resetEditForm();
+  }
+
   protected getCoverClass(book: Book): string {
     const source = `${book.id}${book.name}`;
     const hash = Array.from(source).reduce((total, character) => total + character.charCodeAt(0), 0);
@@ -115,6 +155,10 @@ export class BooksPageComponent implements OnInit {
 
   protected isBorrowing(bookId: string): boolean {
     return this.borrowingBookId() === bookId;
+  }
+
+  protected isDeleting(bookId: string): boolean {
+    return this.deletingBookId() === bookId;
   }
 
   protected borrowBook(book: Book): void {
@@ -182,8 +226,69 @@ export class BooksPageComponent implements OnInit {
       });
   }
 
+  protected updateBook(): void {
+    this.editErrorMessage.set(null);
+
+    if (this.editBookForm.invalid) {
+      this.editBookForm.markAllAsTouched();
+      return;
+    }
+
+    const book = this.selectedBook();
+
+    if (!book || this.isUpdating()) {
+      return;
+    }
+
+    const request: UpdateBookRequest = this.editBookForm.getRawValue();
+
+    this.isUpdating.set(true);
+
+    this.booksApi
+      .update(book.id, request)
+      .pipe(finalize(() => this.isUpdating.set(false)))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Başarılı',
+            detail: 'Kitap güncellendi.'
+          });
+          this.isEditDialogVisible.set(false);
+          this.resetEditForm();
+          this.loadBooks();
+        },
+        error: (error: unknown) => {
+          this.editErrorMessage.set(this.getUpdateErrorMessage(error));
+        }
+      });
+  }
+
+  protected confirmDeleteBook(book: Book): void {
+    if (this.deletingBookId()) {
+      return;
+    }
+
+    this.confirmationService.confirm({
+      header: 'Kitabı Sil',
+      message: `"${book.name}" kitabını silmek istediğinize emin misiniz?`,
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Evet, Sil',
+      rejectLabel: 'Vazgeç',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary p-button-text',
+      accept: () => this.deleteBook(book)
+    });
+  }
+
   protected showCreateValidationError(controlName: CreateBookControlName): boolean {
     const control = this.createBookForm.controls[controlName];
+
+    return control.invalid && (control.dirty || control.touched);
+  }
+
+  protected showEditValidationError(controlName: EditBookControlName): boolean {
+    const control = this.editBookForm.controls[controlName];
 
     return control.invalid && (control.dirty || control.touched);
   }
@@ -204,6 +309,53 @@ export class BooksPageComponent implements OnInit {
     }
 
     return '';
+  }
+
+  protected getEditValidationMessage(controlName: EditBookControlName): string {
+    const control = this.editBookForm.controls[controlName];
+
+    if (control.hasError('required')) {
+      return this.getEditRequiredMessage(controlName);
+    }
+
+    if ((controlName === 'name' || controlName === 'author') && control.hasError('maxlength')) {
+      return 'En fazla 200 karakter girebilirsiniz.';
+    }
+
+    if (controlName === 'stock' && control.hasError('min')) {
+      return 'Stok 0 veya daha büyük olmalıdır.';
+    }
+
+    return '';
+  }
+
+  private deleteBook(book: Book): void {
+    if (this.deletingBookId()) {
+      return;
+    }
+
+    this.deletingBookId.set(book.id);
+
+    this.booksApi
+      .delete(book.id)
+      .pipe(finalize(() => this.deletingBookId.set(null)))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Başarılı',
+            detail: 'Kitap silindi.'
+          });
+          this.loadBooks();
+        },
+        error: (error: unknown) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'İşlem başarısız',
+            detail: this.getDeleteErrorMessage(error)
+          });
+        }
+      });
   }
 
   private loadBooks(): void {
@@ -263,6 +415,46 @@ export class BooksPageComponent implements OnInit {
     return 'Kitap eklenirken bir hata oluştu.';
   }
 
+  private getUpdateErrorMessage(error: unknown): string {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'Kitap güncellenirken bir hata oluştu.';
+    }
+
+    const problem = this.getProblemDetails(error);
+
+    if (error.status === 400 && problem?.title === 'Validation failed.') {
+      return 'Lütfen kitap bilgilerini kontrol edin.';
+    }
+
+    if (error.status === 404 && problem?.title === 'Resource not found.') {
+      return 'Kitap bulunamadı.';
+    }
+
+    if (error.status === 409 && problem?.title === 'Concurrency conflict.') {
+      return 'Kitap durumu değişti. Lütfen tekrar deneyin.';
+    }
+
+    return 'Kitap güncellenirken bir hata oluştu.';
+  }
+
+  private getDeleteErrorMessage(error: unknown): string {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'Kitap silinirken bir hata oluştu.';
+    }
+
+    const problem = this.getProblemDetails(error);
+
+    if (error.status === 404 && problem?.title === 'Resource not found.') {
+      return 'Kitap bulunamadı.';
+    }
+
+    if (error.status === 409 && problem?.title === 'Concurrency conflict.') {
+      return 'Kitap durumu değişti. Lütfen tekrar deneyin.';
+    }
+
+    return 'Kitap silinirken bir hata oluştu.';
+  }
+
   private getProblemDetails(error: HttpErrorResponse): { title?: string; detail?: string } | null {
     const body = error.error as { title?: unknown; detail?: unknown } | null;
 
@@ -281,8 +473,28 @@ export class BooksPageComponent implements OnInit {
     this.createErrorMessage.set(null);
   }
 
+  private resetEditForm(): void {
+    this.editBookForm.reset({
+      name: '',
+      author: '',
+      stock: 0
+    });
+    this.selectedBook.set(null);
+    this.editErrorMessage.set(null);
+  }
+
   private getCreateRequiredMessage(controlName: CreateBookControlName): string {
     const messages: Record<CreateBookControlName, string> = {
+      name: 'Kitap adı zorunludur.',
+      author: 'Yazar zorunludur.',
+      stock: 'Stok zorunludur.'
+    };
+
+    return messages[controlName];
+  }
+
+  private getEditRequiredMessage(controlName: EditBookControlName): string {
+    const messages: Record<EditBookControlName, string> = {
       name: 'Kitap adı zorunludur.',
       author: 'Yazar zorunludur.',
       stock: 'Stok zorunludur.'

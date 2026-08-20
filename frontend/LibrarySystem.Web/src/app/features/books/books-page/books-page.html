@@ -1,4 +1,5 @@
 <p-toast />
+<p-confirmdialog />
 
 <section class="books-page">
   <div class="books-page__header grid align-items-center">
@@ -68,9 +69,30 @@
                   size="small"
                   styleClass="book-card__borrow-button"
                   [loading]="isBorrowing(book.id)"
-                  [disabled]="book.stock === 0 || isBorrowing(book.id)"
+                  [disabled]="book.stock === 0 || isBorrowing(book.id) || isDeleting(book.id)"
                   (onClick)="borrowBook(book)"
                 />
+                <div class="book-card__manage-actions flex gap-2">
+                  <p-button
+                    label="Düzenle"
+                    icon="pi pi-pencil"
+                    size="small"
+                    severity="secondary"
+                    styleClass="book-card__manage-button"
+                    [disabled]="isDeleting(book.id)"
+                    (onClick)="openEditDialog(book)"
+                  />
+                  <p-button
+                    label="Sil"
+                    icon="pi pi-trash"
+                    size="small"
+                    severity="danger"
+                    styleClass="book-card__manage-button"
+                    [loading]="isDeleting(book.id)"
+                    [disabled]="isDeleting(book.id)"
+                    (onClick)="confirmDeleteBook(book)"
+                  />
+                </div>
               </article>
             </ng-template>
           </p-card>
@@ -161,6 +183,92 @@
         icon="pi pi-check"
         [loading]="isCreating()"
         [disabled]="isCreating()"
+      />
+    </div>
+  </form>
+</p-dialog>
+
+<p-dialog
+  header="Kitabı Düzenle"
+  [visible]="isEditDialogVisible()"
+  (visibleChange)="isEditDialogVisible.set($event)"
+  (onHide)="closeEditDialog()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="!isUpdating()"
+  [dismissableMask]="!isUpdating()"
+  styleClass="book-edit-dialog"
+>
+  @if (editErrorMessage()) {
+    <p-message severity="error" size="small" class="book-create-form__message">
+      {{ editErrorMessage() }}
+    </p-message>
+  }
+
+  <form class="book-create-form flex flex-column gap-3" [formGroup]="editBookForm" (ngSubmit)="updateBook()">
+    <div class="book-create-form__field">
+      <label for="editBookName">Kitap Adı</label>
+      <input
+        id="editBookName"
+        class="w-full"
+        pInputText
+        type="text"
+        formControlName="name"
+        maxlength="200"
+        autocomplete="off"
+      />
+      @if (showEditValidationError('name')) {
+        <small>{{ getEditValidationMessage('name') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__field">
+      <label for="editBookAuthor">Yazar</label>
+      <input
+        id="editBookAuthor"
+        class="w-full"
+        pInputText
+        type="text"
+        formControlName="author"
+        maxlength="200"
+        autocomplete="off"
+      />
+      @if (showEditValidationError('author')) {
+        <small>{{ getEditValidationMessage('author') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__field">
+      <label for="editBookStock">Stok</label>
+      <p-inputnumber
+        inputId="editBookStock"
+        formControlName="stock"
+        [showButtons]="true"
+        [useGrouping]="false"
+        inputStyleClass="w-full book-create-form__number-input"
+        styleClass="w-full"
+      />
+      @if (showEditValidationError('stock')) {
+        <small>{{ getEditValidationMessage('stock') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__footer flex justify-content-end gap-2">
+      <p-button
+        type="button"
+        label="Vazgeç"
+        severity="secondary"
+        [text]="true"
+        [disabled]="isUpdating()"
+        (onClick)="closeEditDialog()"
+      />
+      <p-button
+        type="submit"
+        label="Kaydet"
+        icon="pi pi-check"
+        [loading]="isUpdating()"
+        [disabled]="isUpdating()"
       />
     </div>
   </form>
