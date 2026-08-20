@@ -11,6 +11,7 @@ import { BorrowedBook } from '../borrowing/models/borrowed-book.model';
 import { BorrowingApiService } from '../borrowing/services/borrowing-api.service';
 import { Book } from '../books/models/book.model';
 import { BooksApiService } from '../books/services/books-api.service';
+import { AuthStateService } from '../../core/auth/auth-state.service';
 
 interface SummaryItem {
   label: string;
@@ -26,6 +27,7 @@ interface SummaryItem {
   styleUrl: './dashboard.scss'
 })
 export class DashboardComponent implements OnInit {
+  private readonly authState = inject(AuthStateService);
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
@@ -38,26 +40,22 @@ export class DashboardComponent implements OnInit {
   });
 
   protected readonly books = signal<Book[]>([]);
+  protected readonly totalBookCount = signal(0);
   protected readonly borrowedBooks = signal<BorrowedBook[]>([]);
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
+  protected readonly isAuthenticated = this.authState.isAuthenticated;
 
   protected readonly catalogBooks = computed(() => this.books().slice(0, 4));
   protected readonly recentBorrowedBooks = computed(() => this.borrowedBooks().slice(0, 3));
 
   protected readonly summaryItems = computed<SummaryItem[]>(() => [
-    { label: 'Toplam Kitap', value: this.books().length.toString(), icon: 'pi pi-book', tone: 'gold' },
-    {
-      label: 'Mevcut Stok',
-      value: this.books().reduce((total, book) => total + book.stock, 0).toString(),
-      icon: 'pi pi-check-circle',
-      tone: 'teal'
-    },
+    { label: 'Toplam Kitap', value: this.totalBookCount().toString(), icon: 'pi pi-book', tone: 'gold' },
     {
       label: 'Aktif Ödünçlerim',
       value: this.borrowedBooks().length.toString(),
       icon: 'pi pi-bookmark',
-      tone: 'gold'
+      tone: 'teal'
     }
   ]);
 
@@ -93,14 +91,32 @@ export class DashboardComponent implements OnInit {
     this.isLoading.set(true);
     this.errorMessage.set(null);
 
+    if (!this.isAuthenticated()) {
+      this.booksApi
+        .getAll(1, 4)
+        .pipe(finalize(() => this.isLoading.set(false)))
+        .subscribe({
+          next: (books) => {
+            this.books.set(books.items);
+            this.totalBookCount.set(books.totalCount);
+            this.borrowedBooks.set([]);
+          },
+          error: () => {
+            this.errorMessage.set('Dashboard verileri yÃ¼klenirken bir hata oluÅŸtu.');
+          }
+        });
+      return;
+    }
+
     forkJoin({
-      books: this.booksApi.getAll(),
+      books: this.booksApi.getAll(1, 4),
       borrowedBooks: this.borrowingApi.getMyBooks()
     })
       .pipe(finalize(() => this.isLoading.set(false)))
       .subscribe({
         next: ({ books, borrowedBooks }) => {
-          this.books.set(books);
+          this.books.set(books.items);
+          this.totalBookCount.set(books.totalCount);
           this.borrowedBooks.set(borrowedBooks);
         },
         error: () => {

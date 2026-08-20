@@ -19,8 +19,11 @@
           aria-label="Kitap adı veya yazar ara"
           [value]="searchTerm()"
           (input)="updateSearchTerm($any($event.target).value)"
+          (keydown.enter)="searchBooks()"
         />
       </label>
+
+        <p-button label="Ara" icon="pi pi-search" size="small" (onClick)="searchBooks()" />
 
         @if (isAdmin()) {
           <p-button label="Kitap Ekle" icon="pi pi-plus" size="small" (onClick)="openCreateDialog()" />
@@ -38,19 +41,19 @@
     <p-message severity="error" size="small" class="books-page__message">
       {{ errorMessage() }}
     </p-message>
-  } @else if (books().length === 0) {
+  } @else if (books().length === 0 && !activeSearchTerm()) {
     <div class="books-page__state">
       <i class="pi pi-book"></i>
       <strong>Henüz kayıtlı kitap bulunmuyor.</strong>
     </div>
-  } @else if (filteredBooks().length === 0) {
+  } @else if (books().length === 0 && activeSearchTerm()) {
     <div class="books-page__state">
       <i class="pi pi-search"></i>
       <strong>Aramanızla eşleşen kitap bulunamadı.</strong>
     </div>
   } @else {
     <div class="grid books-page__grid">
-      @for (book of filteredBooks(); track book.id) {
+      @for (book of books(); track book.id) {
         <div class="col-12 sm:col-6 lg:col-4 xl:col-3">
           <p-card styleClass="book-card">
             <ng-template #content>
@@ -103,6 +106,16 @@
         </div>
       }
     </div>
+
+    <p-paginator
+      [first]="(page() - 1) * pageSize()"
+      [rows]="pageSize()"
+      [totalRecords]="totalCount()"
+      [rowsPerPageOptions]="pageSizeOptions"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="{first} - {last} / {totalRecords}"
+      (onPageChange)="handlePageChange($event)"
+    />
   }
 </section>
 

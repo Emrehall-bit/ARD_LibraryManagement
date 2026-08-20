@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, inject, OnInit, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
@@ -9,6 +9,7 @@ import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
+import { PaginatorModule } from 'primeng/paginator';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
@@ -24,6 +25,7 @@ import { BooksApiService } from '../services/books-api.service';
 type StockSeverity = 'success' | 'danger';
 type CreateBookControlName = 'name' | 'author' | 'stock';
 type EditBookControlName = 'name' | 'author' | 'stock';
+type BooksPageChangeEvent = { first?: number; rows?: number; page?: number };
 
 @Component({
   selector: 'app-books-page',
@@ -35,6 +37,7 @@ type EditBookControlName = 'name' | 'author' | 'stock';
     InputNumberModule,
     InputTextModule,
     MessageModule,
+    PaginatorModule,
     ProgressSpinnerModule,
     ReactiveFormsModule,
     TagModule,
@@ -57,6 +60,11 @@ export class BooksPageComponent implements OnInit {
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly searchTerm = signal('');
+  protected readonly activeSearchTerm = signal('');
+  protected readonly page = signal(1);
+  protected readonly pageSize = signal(20);
+  protected readonly totalCount = signal(0);
+  protected readonly totalPages = signal(0);
   protected readonly borrowingBookId = signal<string | null>(null);
   protected readonly isCreateDialogVisible = signal(false);
   protected readonly isCreating = signal(false);
@@ -67,6 +75,7 @@ export class BooksPageComponent implements OnInit {
   protected readonly editErrorMessage = signal<string | null>(null);
   protected readonly deletingBookId = signal<string | null>(null);
   protected readonly isAdmin = this.authState.isAdmin;
+  protected readonly pageSizeOptions = [20, 40, 60, 100];
 
   protected readonly createBookForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -80,27 +89,29 @@ export class BooksPageComponent implements OnInit {
     stock: [0, [Validators.required, Validators.min(0)]]
   });
 
-  protected readonly filteredBooks = computed(() => {
-    const query = this.searchTerm().trim().toLocaleLowerCase('tr-TR');
-
-    if (!query) {
-      return this.books();
-    }
-
-    return this.books().filter((book) => {
-      const name = book.name.toLocaleLowerCase('tr-TR');
-      const author = book.author.toLocaleLowerCase('tr-TR');
-
-      return name.includes(query) || author.includes(query);
-    });
-  });
-
   ngOnInit(): void {
     this.loadBooks();
   }
 
   protected updateSearchTerm(value: string): void {
     this.searchTerm.set(value);
+  }
+
+  protected searchBooks(): void {
+    this.activeSearchTerm.set(this.searchTerm().trim());
+    this.page.set(1);
+    this.loadBooks();
+  }
+
+  protected handlePageChange(event: BooksPageChangeEvent): void {
+    const nextPageSize = event.rows ?? this.pageSize();
+    const nextPage = nextPageSize !== this.pageSize()
+      ? 1
+      : (event.page ?? Math.floor((event.first ?? 0) / nextPageSize)) + 1;
+
+    this.pageSize.set(nextPageSize);
+    this.page.set(nextPage);
+    this.loadBooks();
   }
 
   protected openCreateDialog(): void {
@@ -181,7 +192,7 @@ export class BooksPageComponent implements OnInit {
             summary: 'Başarılı',
             detail: 'Kitap ödünç alındı.'
           });
-          this.loadBooks();
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.messageService.add({
@@ -221,7 +232,7 @@ export class BooksPageComponent implements OnInit {
           });
           this.isCreateDialogVisible.set(false);
           this.resetCreateForm();
-          this.loadBooks();
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.createErrorMessage.set(this.getCreateErrorMessage(error));
@@ -259,7 +270,7 @@ export class BooksPageComponent implements OnInit {
           });
           this.isEditDialogVisible.set(false);
           this.resetEditForm();
-          this.loadBooks();
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.editErrorMessage.set(this.getUpdateErrorMessage(error));
@@ -349,7 +360,11 @@ export class BooksPageComponent implements OnInit {
             summary: 'Başarılı',
             detail: 'Kitap silindi.'
           });
-          this.loadBooks();
+          if (this.books().length === 1 && this.page() > 1) {
+            this.page.update((page) => page - 1);
+          }
+
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.messageService.add({
@@ -366,16 +381,24 @@ export class BooksPageComponent implements OnInit {
     this.errorMessage.set(null);
 
     this.booksApi
-      .getAll()
+      .getAll(this.page(), this.pageSize(), this.activeSearchTerm())
       .pipe(finalize(() => this.isLoading.set(false)))
       .subscribe({
-        next: (books) => {
-          this.books.set(books);
+        next: (response) => {
+          this.books.set(response.items);
+          this.page.set(response.page);
+          this.pageSize.set(response.pageSize);
+          this.totalCount.set(response.totalCount);
+          this.totalPages.set(response.totalPages);
         },
         error: () => {
           this.errorMessage.set('Kitaplar yüklenirken bir hata oluştu.');
         }
       });
+  }
+
+  private loadCurrentPage(): void {
+    this.loadBooks();
   }
 
   private getBorrowErrorMessage(error: unknown): string {

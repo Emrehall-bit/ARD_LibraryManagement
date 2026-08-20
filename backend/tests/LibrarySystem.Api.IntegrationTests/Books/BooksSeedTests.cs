@@ -23,19 +23,30 @@ public sealed class BooksSeedTests(LibrarySystemApiFactory factory) : IAsyncLife
     }
 
     [Fact]
-    public async Task SeedBooksAsync_WhenDatabaseIsEmpty_AddsSyntheticBooks()
+    public async Task SeedBooksAsync_WhenDatabaseIsEmpty_AddsBibliographicBooksWithValidMetadata()
     {
         await factory.Services.SeedBooksAsync();
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-        var bookCount = await dbContext.Books.CountAsync();
-        var outOfStockCount = await dbContext.Books.CountAsync(book => book.Stock == 0);
-        var negativeStockCount = await dbContext.Books.CountAsync(book => book.Stock < 0);
+        var books = await dbContext.Books
+            .AsNoTracking()
+            .ToListAsync();
+        var duplicateNameAuthorCount = books
+            .GroupBy(book => new { book.Name, book.Author })
+            .Count(group => group.Count() > 1);
 
-        Assert.Equal(ExpectedSeedCount, bookCount);
-        Assert.True(outOfStockCount > 0);
-        Assert.Equal(0, negativeStockCount);
+        Assert.Equal(ExpectedSeedCount, books.Count);
+        Assert.All(books, book =>
+        {
+            Assert.False(string.IsNullOrWhiteSpace(book.Name));
+            Assert.False(string.IsNullOrWhiteSpace(book.Author));
+            Assert.True(book.Name.Length <= 200);
+            Assert.True(book.Author.Length <= 200);
+            Assert.InRange(book.Stock, 0, 20);
+        });
+        Assert.Equal(0, duplicateNameAuthorCount);
+        Assert.Contains(books, book => book.Stock == 0);
     }
 
     [Fact]

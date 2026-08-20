@@ -1,50 +1,195 @@
+param(
+    [int] $TargetCount = 5000,
+    [int] $PageSize = 100
+)
+
 $ErrorActionPreference = 'Stop'
 
-$adjectives = @(
-    'Adaptive', 'Balanced', 'Bright', 'Calm', 'Clear', 'Compact', 'Creative', 'Digital',
-    'Dynamic', 'Emerging', 'Essential', 'Focused', 'Gentle', 'Hidden', 'Modern', 'Open',
-    'Practical', 'Quiet', 'Rapid', 'Resilient', 'Robust', 'Signal', 'Silent', 'Simple',
-    'Steady'
+$queries = @(
+    'subject:fiction',
+    'subject:literature',
+    'subject:science_fiction',
+    'subject:fantasy',
+    'subject:mystery',
+    'subject:history',
+    'subject:biography',
+    'subject:philosophy',
+    'subject:science',
+    'subject:poetry',
+    'subject:plays',
+    'subject:children',
+    'subject:classics',
+    'subject:turkish_literature'
 )
 
-$subjects = @(
-    'Archive', 'Atlas', 'Bridge', 'Catalog', 'Circuit', 'Compass', 'Dataset', 'Design',
-    'Garden', 'Harbor', 'Index', 'Journey', 'Kernel', 'Library', 'Map', 'Notebook',
-    'Pattern', 'Protocol', 'River', 'System'
-)
+$outputPath = Join-Path $PSScriptRoot 'books.seed.json'
+$books = [System.Collections.Generic.List[object]]::new()
+$seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 
-$themes = @(
-    'for Beginners', 'in Practice', 'Field Notes', 'Handbook', 'Reference', 'Workbook',
-    'Case Studies', 'Primer', 'Companion', 'Guide'
-)
+function Normalize-Text([string] $value) {
+    return ($value -replace '\s+', ' ').Trim()
+}
 
-$firstNames = @(
-    'Alex', 'Avery', 'Casey', 'Devon', 'Drew', 'Emery', 'Finley', 'Harper', 'Jordan',
-    'Kai', 'Logan', 'Morgan', 'Parker', 'Quinn', 'Reese', 'Riley', 'Rowan', 'Sage',
-    'Taylor', 'Terry'
-)
+function Test-BookText([string] $value) {
+    if ([string]::IsNullOrWhiteSpace($value)) {
+        return $false
+    }
 
-$lastNames = @(
-    'Anders', 'Bennett', 'Carter', 'Dawson', 'Ellis', 'Foster', 'Gray', 'Hayes',
-    'Irwin', 'Jensen', 'Keller', 'Lane', 'Morris', 'Nolan', 'Owen', 'Porter',
-    'Reed', 'Stone', 'Turner', 'Vale'
-)
+    $text = Normalize-Text $value
 
-$books = for ($i = 0; $i -lt 5000; $i++) {
-    $adjective = $adjectives[$i % $adjectives.Count]
-    $subject = $subjects[[Math]::Floor($i / $adjectives.Count) % $subjects.Count]
-    $theme = $themes[[Math]::Floor($i / ($adjectives.Count * $subjects.Count)) % $themes.Count]
-    $volume = [Math]::Floor($i / ($adjectives.Count * $subjects.Count * $themes.Count)) + 1
-    $firstName = $firstNames[($i * 7 + 3) % $firstNames.Count]
-    $lastName = $lastNames[($i * 11 + 5) % $lastNames.Count]
-    $stock = ($i * 5 + 3) % 21
+    if ($text.Length -gt 200) {
+        return $false
+    }
 
-    [ordered]@{
-        name = "Synthetic Catalogue - $adjective $subject $theme Vol. $volume"
-        author = "$firstName $lastName"
-        stock = $stock
+    if ($text -match '^\W+$') {
+        return $false
+    }
+
+    return $true
+}
+
+function Test-Author([string] $value) {
+    if (-not (Test-BookText $value)) {
+        return $false
+    }
+
+    $text = Normalize-Text $value
+    $blockedAuthors = @(
+        'unknown',
+        'unknown author',
+        'anonymous',
+        'not available',
+        'n/a'
+    )
+
+    return -not $blockedAuthors.Contains($text.ToLowerInvariant())
+}
+
+function Get-DeterministicStock([string] $name, [string] $author) {
+    $inputText = "$name|$author"
+    $bytes = [System.Text.Encoding]::UTF8.GetBytes($inputText)
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+
+    try {
+        $hash = $sha256.ComputeHash($bytes)
+        $number = [System.BitConverter]::ToUInt32($hash, 0)
+    }
+    finally {
+        $sha256.Dispose()
+    }
+
+    return [int]($number % 21)
+}
+
+function New-OpenLibrarySearchUri([string] $query, [int] $page, [int] $limit) {
+    $encodedQuery = [Uri]::EscapeDataString($query)
+    $encodedFields = [Uri]::EscapeDataString('title,author_name')
+
+    return "https://openlibrary.org/search.json?q=$encodedQuery&fields=$encodedFields&limit=$limit&page=$page"
+}
+
+function Invoke-OpenLibrarySearch([string] $uri) {
+    $maxAttempts = 3
+
+    for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+        try {
+            return Invoke-RestMethod -Uri $uri -TimeoutSec 30 -Headers @{
+                'User-Agent' = 'LibrarySystem seed generator (development data preparation)'
+            }
+        }
+        catch {
+            if ($attempt -eq $maxAttempts) {
+                throw
+            }
+
+            Start-Sleep -Seconds ($attempt * 2)
+        }
     }
 }
 
-$outputPath = Join-Path $PSScriptRoot 'books.seed.json'
-$books | ConvertTo-Json -Depth 3 | Set-Content -Path $outputPath -Encoding utf8
+function Add-Book([string] $name, [string] $author) {
+    $normalizedName = Normalize-Text $name
+    $normalizedAuthor = Normalize-Text $author
+
+    if (-not (Test-BookText $normalizedName) -or -not (Test-Author $normalizedAuthor)) {
+        return
+    }
+
+    $key = "$normalizedName|$normalizedAuthor"
+
+    if (-not $seen.Add($key)) {
+        return
+    }
+
+    $books.Add([pscustomobject][ordered]@{
+        name = $normalizedName
+        author = $normalizedAuthor
+        stock = Get-DeterministicStock $normalizedName $normalizedAuthor
+    })
+}
+
+$pagesByQuery = @{}
+$activeQueries = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+
+$queries | ForEach-Object {
+    $pagesByQuery[$_] = 1
+    $null = $activeQueries.Add($_)
+}
+
+while ($books.Count -lt $TargetCount -and $activeQueries.Count -gt 0) {
+    foreach ($query in $queries) {
+        if ($books.Count -ge $TargetCount) {
+            break
+        }
+
+        if (-not $activeQueries.Contains($query)) {
+            continue
+        }
+
+        $page = $pagesByQuery[$query]
+        $uri = New-OpenLibrarySearchUri $query $page $PageSize
+
+        Write-Host "Fetching $query page $page..."
+
+        $response = Invoke-OpenLibrarySearch $uri
+
+        if ($null -eq $response.docs -or $response.docs.Count -eq 0) {
+            $null = $activeQueries.Remove($query)
+            continue
+        }
+
+        foreach ($doc in $response.docs) {
+            if ($books.Count -ge $TargetCount) {
+                break
+            }
+
+            if ($null -eq $doc.author_name -or $doc.author_name.Count -eq 0) {
+                continue
+            }
+
+            Add-Book $doc.title $doc.author_name[0]
+        }
+
+        $pagesByQuery[$query] = $page + 1
+    }
+}
+
+if ($books.Count -lt $TargetCount) {
+    throw "Only $($books.Count) valid unique books were collected; target was $TargetCount."
+}
+
+$orderedBooks = $books |
+    Sort-Object @{ Expression = 'author'; Ascending = $true }, @{ Expression = 'name'; Ascending = $true } |
+    Select-Object -First $TargetCount
+
+$orderedBooks |
+    ConvertTo-Json -Depth 3 |
+    Set-Content -Path $outputPath -Encoding utf8
+
+$uniqueAuthors = ($orderedBooks | Select-Object -ExpandProperty author -Unique).Count
+$outOfStockCount = ($orderedBooks | Where-Object { $_.stock -eq 0 }).Count
+
+Write-Host "Generated $($orderedBooks.Count) books."
+Write-Host "Unique authors: $uniqueAuthors"
+Write-Host "Out-of-stock entries: $outOfStockCount"
+Write-Host "Output: $outputPath"

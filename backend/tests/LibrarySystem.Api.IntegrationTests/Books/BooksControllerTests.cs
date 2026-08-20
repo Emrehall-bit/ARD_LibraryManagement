@@ -27,13 +27,13 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
-    public async Task GetBooks_WithoutAuthentication_ReturnsUnauthorized()
+    public async Task GetBooks_WithoutAuthentication_ReturnsOk()
     {
         using var client = factory.CreateUnauthenticatedApiClient();
 
         var response = await client.GetAsync("/api/books");
 
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]

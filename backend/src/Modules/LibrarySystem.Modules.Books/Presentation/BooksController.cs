@@ -8,11 +8,11 @@ using Microsoft.AspNetCore.Mvc;
 namespace LibrarySystem.Modules.Books.Presentation;
 
 [ApiController]
-[Authorize(Roles = IdentityRoles.Admin + "," + IdentityRoles.Member)]
 [Route("api/books")]
 public sealed class BooksController(IBookService bookService) : ControllerBase
 {
     [HttpGet]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(PagedBooksResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PagedBooksResponseDto>> GetAll(
@@ -25,6 +25,7 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
     }
 
     [HttpGet("{id:guid}")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(BookResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BookResponseDto>> GetById(

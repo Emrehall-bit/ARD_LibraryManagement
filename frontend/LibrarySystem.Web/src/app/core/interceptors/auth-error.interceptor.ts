@@ -22,6 +22,7 @@ export const authErrorInterceptor: HttpInterceptorFn = (request, next) => {
       if (
         isApiRequest &&
         !isAnonymousAuthRequest &&
+        authState.isAuthenticated() &&
         error instanceof HttpErrorResponse &&
         error.status === 401
       ) {

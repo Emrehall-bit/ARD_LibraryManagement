@@ -248,7 +248,7 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
     {
         using var client = factory.CreateUnauthenticatedApiClient();
 
-        var response = await client.GetAsync("/api/books");
+        var response = await client.GetAsync("/api/borrow/my-books");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -265,7 +265,7 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
             authResponse.TokenType,
             authResponse.AccessToken);
 
-        var response = await client.GetAsync("/api/books");
+        var response = await client.GetAsync("/api/borrow/my-books");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
