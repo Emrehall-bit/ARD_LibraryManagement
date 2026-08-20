@@ -1,5 +1,6 @@
 using LibrarySystem.Api.ExceptionHandling;
 using LibrarySystem.Modules.Books.Infrastructure;
+using LibrarySystem.Modules.Books.Infrastructure.Seeding;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
@@ -84,6 +85,7 @@ await app.Services.SeedIdentityAsync();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    await app.Services.SeedBooksAsync();
 }
 
 app.UseHttpsRedirection();
