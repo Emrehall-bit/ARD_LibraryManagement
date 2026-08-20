@@ -14,6 +14,7 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
 
+import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { Book } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
@@ -44,6 +45,7 @@ type EditBookControlName = 'name' | 'author' | 'stock';
   styleUrl: './books-page.scss'
 })
 export class BooksPageComponent implements OnInit {
+  private readonly authState = inject(AuthStateService);
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
   private readonly confirmationService = inject(ConfirmationService);
@@ -64,6 +66,7 @@ export class BooksPageComponent implements OnInit {
   protected readonly isUpdating = signal(false);
   protected readonly editErrorMessage = signal<string | null>(null);
   protected readonly deletingBookId = signal<string | null>(null);
+  protected readonly isAdmin = this.authState.isAdmin;
 
   protected readonly createBookForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
