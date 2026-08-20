@@ -32,20 +32,32 @@
       ariaLabel="Ayarlar"
     />
 
-    <div class="topbar__user flex align-items-center gap-2">
-      <span class="topbar__avatar flex align-items-center justify-content-center">K</span>
-      <span class="topbar__username">Kullanıcı</span>
-      <i class="pi pi-angle-down topbar__chevron"></i>
-    </div>
+    @if (isAuthenticated()) {
+      <div class="topbar__user flex align-items-center gap-2">
+        <span class="topbar__avatar flex align-items-center justify-content-center">K</span>
+        <span class="topbar__username">Kullanıcı</span>
+        <i class="pi pi-angle-down topbar__chevron"></i>
+      </div>
 
-    <p-button
-      icon="pi pi-sign-out"
-      label="Çıkış Yap"
-      severity="secondary"
-      [text]="true"
-      styleClass="topbar__logout-button"
-      ariaLabel="Çıkış yap"
-      (onClick)="logout()"
-    />
+      <p-button
+        icon="pi pi-sign-out"
+        label="Çıkış Yap"
+        severity="secondary"
+        [text]="true"
+        styleClass="topbar__auth-button"
+        ariaLabel="Çıkış yap"
+        (onClick)="logout()"
+      />
+    } @else {
+      <p-button
+        icon="pi pi-sign-in"
+        label="Giriş Yap"
+        severity="secondary"
+        [text]="true"
+        styleClass="topbar__auth-button"
+        ariaLabel="Giriş yap"
+        (onClick)="login()"
+      />
+    }
   </div>
 </header>

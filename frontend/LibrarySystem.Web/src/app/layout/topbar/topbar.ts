@@ -16,6 +16,12 @@ export class TopbarComponent {
   private readonly authState = inject(AuthStateService);
   private readonly router = inject(Router);
 
+  protected readonly isAuthenticated = this.authState.isAuthenticated;
+
+  login(): void {
+    this.router.navigate(['/login']);
+  }
+
   logout(): void {
     this.authState.logout();
     this.router.navigate(['/login']);

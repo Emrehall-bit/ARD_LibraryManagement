@@ -8,7 +8,8 @@
     </div>
 
     <div class="col-12 lg:col-7">
-      <label class="books-page__search flex align-items-center ml-auto">
+      <div class="books-page__actions flex align-items-center justify-content-end gap-2">
+      <label class="books-page__search flex align-items-center">
         <i class="pi pi-search"></i>
         <input
           pInputText
@@ -19,6 +20,9 @@
           (input)="updateSearchTerm($any($event.target).value)"
         />
       </label>
+
+        <p-button label="Kitap Ekle" icon="pi pi-plus" size="small" (onClick)="openCreateDialog()" />
+      </div>
     </div>
   </div>
 
@@ -75,3 +79,89 @@
     </div>
   }
 </section>
+
+<p-dialog
+  header="Yeni Kitap Ekle"
+  [visible]="isCreateDialogVisible()"
+  (visibleChange)="isCreateDialogVisible.set($event)"
+  (onHide)="closeCreateDialog()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="!isCreating()"
+  [dismissableMask]="!isCreating()"
+  styleClass="book-create-dialog"
+>
+  @if (createErrorMessage()) {
+    <p-message severity="error" size="small" class="book-create-form__message">
+      {{ createErrorMessage() }}
+    </p-message>
+  }
+
+  <form class="book-create-form flex flex-column gap-3" [formGroup]="createBookForm" (ngSubmit)="createBook()">
+    <div class="book-create-form__field">
+      <label for="bookName">Kitap Adı</label>
+      <input
+        id="bookName"
+        class="w-full"
+        pInputText
+        type="text"
+        formControlName="name"
+        maxlength="200"
+        autocomplete="off"
+      />
+      @if (showCreateValidationError('name')) {
+        <small>{{ getCreateValidationMessage('name') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__field">
+      <label for="bookAuthor">Yazar</label>
+      <input
+        id="bookAuthor"
+        class="w-full"
+        pInputText
+        type="text"
+        formControlName="author"
+        maxlength="200"
+        autocomplete="off"
+      />
+      @if (showCreateValidationError('author')) {
+        <small>{{ getCreateValidationMessage('author') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__field">
+      <label for="bookStock">Stok</label>
+      <p-inputnumber
+        inputId="bookStock"
+        formControlName="stock"
+        [showButtons]="true"
+        [useGrouping]="false"
+        inputStyleClass="w-full book-create-form__number-input"
+        styleClass="w-full"
+      />
+      @if (showCreateValidationError('stock')) {
+        <small>{{ getCreateValidationMessage('stock') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__footer flex justify-content-end gap-2">
+      <p-button
+        type="button"
+        label="Vazgeç"
+        severity="secondary"
+        [text]="true"
+        [disabled]="isCreating()"
+        (onClick)="closeCreateDialog()"
+      />
+      <p-button
+        type="submit"
+        label="Kaydet"
+        icon="pi pi-check"
+        [loading]="isCreating()"
+        [disabled]="isCreating()"
+      />
+    </div>
+  </form>
+</p-dialog>

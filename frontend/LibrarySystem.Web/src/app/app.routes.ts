@@ -1,6 +1,5 @@
 import { Routes } from '@angular/router';
 
-import { authGuard } from './core/guards/auth.guard';
 import { AppLayoutComponent } from './layout/app-layout/app-layout';
 
 export const routes: Routes = [
@@ -15,7 +14,6 @@ export const routes: Routes = [
   {
     path: '',
     component: AppLayoutComponent,
-    canActivate: [authGuard],
     children: [
       {
         path: '',
@@ -32,7 +30,8 @@ export const routes: Routes = [
       },
       {
         path: 'my-books',
-        children: []
+        loadComponent: () =>
+          import('./features/borrowing/my-books-page/my-books-page').then((component) => component.MyBooksPageComponent)
       }
     ]
   },

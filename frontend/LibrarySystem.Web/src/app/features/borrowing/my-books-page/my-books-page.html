@@ -1,0 +1,65 @@
+<p-toast />
+
+<section class="my-books-page">
+  <div class="my-books-page__header">
+    <h1>Ödünç Aldıklarım</h1>
+    <p>Aktif ödünç aldığınız kitapları görüntüleyin ve iade edin.</p>
+  </div>
+
+  @if (isLoading()) {
+    <div class="my-books-page__state my-books-page__state--loading flex flex-column align-items-center justify-content-center">
+      <p-progress-spinner ariaLabel="Ödünç aldığınız kitaplar yükleniyor" />
+      <span>Ödünç aldığınız kitaplar yükleniyor...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <p-message severity="error" size="small" class="my-books-page__message">
+      {{ errorMessage() }}
+    </p-message>
+  } @else if (borrowedBooks().length === 0) {
+    <div class="my-books-page__state">
+      <i class="pi pi-bookmark"></i>
+      <strong>Aktif ödünç aldığınız kitap bulunmuyor.</strong>
+    </div>
+  } @else {
+    <div class="grid my-books-page__grid">
+      @for (item of borrowedBooks(); track item.id) {
+        <div class="col-12">
+          <p-card styleClass="my-book-card">
+            <ng-template #content>
+              <article class="my-book-card__content grid align-items-center">
+                <div class="col-12 md:col-7 flex align-items-center gap-3">
+                  <div class="book-cover {{ getCoverClass(item) }}">
+                    <span>{{ getBookName(item) }}</span>
+                  </div>
+
+                  <div class="my-book-card__body">
+                    <h2>{{ getBookName(item) }}</h2>
+                    <p>{{ getAuthor(item) }}</p>
+                    <small>Ödünç alma tarihi: {{ getBorrowedAtLabel(item) }}</small>
+                  </div>
+                </div>
+
+                <div class="col-6 md:col-2">
+                  <p-tag [value]="getStatusLabel(item)" [severity]="getStatusSeverity(item)" />
+                </div>
+
+                <div class="col-6 md:col-3 text-right">
+                  <p-button
+                    class="my-book-card__return-action"
+                    label="İade Et"
+                    icon="pi pi-refresh"
+                    size="small"
+                    styleClass="w-full"
+                    [loading]="isReturning(item.bookId)"
+                    [disabled]="!!item.returnedAt || isReturning(item.bookId)"
+                    (onClick)="returnBook(item)"
+                  />
+                </div>
+              </article>
+            </ng-template>
+          </p-card>
+        </div>
+      }
+    </div>
+  }
+</section>
