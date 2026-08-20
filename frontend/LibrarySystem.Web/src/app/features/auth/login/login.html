@@ -1,0 +1,65 @@
+<main class="login-page flex align-items-center justify-content-center">
+  <section class="login-card" aria-labelledby="login-title">
+    <div class="login-card__brand text-center">
+      <span class="login-card__icon inline-flex align-items-center justify-content-center">
+        <i class="pi pi-book"></i>
+      </span>
+      <h1 id="login-title">Kütüphanem</h1>
+      <p>Kütüphane hesabınıza giriş yapın.</p>
+    </div>
+
+    @if (loginError()) {
+      <p-message severity="error" size="small" class="login-card__message">
+        {{ loginError() }}
+      </p-message>
+    }
+
+    <form class="login-form flex flex-column gap-3" [formGroup]="loginForm" (ngSubmit)="submit()">
+      <div class="login-form__field">
+        <label for="username">Kullanıcı Adı</label>
+        <input
+          id="username"
+          pInputText
+          type="text"
+          formControlName="username"
+          autocomplete="username"
+          placeholder="Kullanıcı adınız"
+        />
+        @if (showValidationError('username')) {
+          <small>Kullanıcı adı zorunludur.</small>
+        }
+      </div>
+
+      <div class="login-form__field">
+        <label for="password">Şifre</label>
+        <p-password
+          inputId="password"
+          formControlName="password"
+          autocomplete="current-password"
+          placeholder="Şifreniz"
+          [feedback]="false"
+          [toggleMask]="true"
+          styleClass="w-full"
+          inputStyleClass="w-full login-form__password-input"
+        />
+        @if (showValidationError('password')) {
+          <small>Şifre zorunludur.</small>
+        }
+      </div>
+
+      <p-button
+        type="submit"
+        label="Giriş Yap"
+        icon="pi pi-sign-in"
+        styleClass="login-form__submit"
+        [loading]="isSubmitting()"
+        [disabled]="isSubmitting()"
+      />
+    </form>
+
+    <p class="login-card__register text-center">
+      Hesabınız yok mu?
+      <a routerLink="/register">Kayıt Ol</a>
+    </p>
+  </section>
+</main>

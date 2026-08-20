@@ -43,7 +43,7 @@ body {
 }
 
 .topbar__menu .p-button,
-.topbar__actions .p-button {
+.topbar__actions .p-button:not(.topbar__logout-button) {
   width: 2.25rem;
   height: 2.25rem;
   padding: 0;
@@ -57,4 +57,26 @@ body {
 .topbar__menu .p-button:hover {
   color: #ffffff;
   background: rgba(255, 255, 255, 0.12);
+}
+
+.topbar__logout-button {
+  min-height: 2.25rem;
+  padding: 0 0.7rem;
+  border-radius: 999px;
+}
+
+.topbar__logout-button .p-button-label {
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
+@media (max-width: 575px) {
+  .topbar__logout-button {
+    width: 2.25rem;
+    padding: 0;
+  }
+
+  .topbar__logout-button .p-button-label {
+    display: none;
+  }
 }

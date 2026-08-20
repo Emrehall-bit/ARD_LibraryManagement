@@ -1,5 +1,8 @@
-import { Component, output } from '@angular/core';
+import { Component, inject, output } from '@angular/core';
+import { Router } from '@angular/router';
 import { ButtonModule } from 'primeng/button';
+
+import { AuthStateService } from '../../core/auth/auth-state.service';
 
 @Component({
   selector: 'app-topbar',
@@ -9,4 +12,12 @@ import { ButtonModule } from 'primeng/button';
 })
 export class TopbarComponent {
   readonly menuClick = output<void>();
+
+  private readonly authState = inject(AuthStateService);
+  private readonly router = inject(Router);
+
+  logout(): void {
+    this.authState.logout();
+    this.router.navigate(['/login']);
+  }
 }

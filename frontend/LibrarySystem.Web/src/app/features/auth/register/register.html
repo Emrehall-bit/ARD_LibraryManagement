@@ -1,0 +1,82 @@
+<main class="register-page flex align-items-center justify-content-center">
+  <section class="register-card" aria-labelledby="register-title">
+    <div class="register-card__brand text-center">
+      <span class="register-card__icon inline-flex align-items-center justify-content-center">
+        <i class="pi pi-book"></i>
+      </span>
+      <h1 id="register-title">Kütüphanem</h1>
+      <p>Hesabınızı oluşturun.</p>
+    </div>
+
+    @if (registerError()) {
+      <p-message severity="error" size="small" class="register-card__message">
+        {{ registerError() }}
+      </p-message>
+    }
+
+    <form class="register-form flex flex-column gap-3" [formGroup]="registerForm" (ngSubmit)="submit()">
+      <div class="register-form__field">
+        <label for="username">Kullanıcı Adı</label>
+        <input
+          id="username"
+          class="w-full"
+          pInputText
+          type="text"
+          formControlName="username"
+          autocomplete="username"
+          placeholder="Kullanıcı adınız"
+        />
+        @if (showValidationError('username')) {
+          <small>{{ getValidationMessage('username') }}</small>
+        }
+      </div>
+
+      <div class="register-form__field">
+        <label for="email">E-posta</label>
+        <input
+          id="email"
+          class="w-full"
+          pInputText
+          type="email"
+          formControlName="email"
+          autocomplete="email"
+          placeholder="E-posta adresiniz"
+        />
+        @if (showValidationError('email')) {
+          <small>{{ getValidationMessage('email') }}</small>
+        }
+      </div>
+
+      <div class="register-form__field">
+        <label for="password">Şifre</label>
+        <p-password
+          inputId="password"
+          formControlName="password"
+          autocomplete="new-password"
+          placeholder="En az 8 karakter"
+          [feedback]="false"
+          [toggleMask]="true"
+          styleClass="w-full"
+          inputStyleClass="w-full register-form__password-input"
+        />
+        @if (showValidationError('password')) {
+          <small>{{ getValidationMessage('password') }}</small>
+        }
+      </div>
+
+      <p-button
+        type="submit"
+        label="Kayıt Ol"
+        icon="pi pi-user-plus"
+        styleClass="register-form__submit"
+        [loading]="isSubmitting()"
+        [disabled]="isSubmitting()"
+      />
+    </form>
+
+    <p class="register-card__login text-center">
+      Zaten hesabınız var mı?
+      <a routerLink="/login">Giriş Yap</a>
+    </p>
+  </section>
+</main>

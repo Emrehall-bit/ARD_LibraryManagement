@@ -1,0 +1,114 @@
+.register-page {
+  min-height: 100dvh;
+  padding: 1.5rem;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(199, 154, 53, 0.12), transparent 28rem),
+    linear-gradient(135deg, var(--app-background), #fbf4e8);
+}
+
+.register-card {
+  width: min(100%, 25.5rem);
+  padding: 1.75rem;
+  border: 1px solid rgba(226, 216, 199, 0.9);
+  border-radius: 0.9rem;
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: var(--app-shadow-soft);
+}
+
+.register-card__brand {
+  margin-bottom: 1.25rem;
+}
+
+.register-card__icon {
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.85rem;
+  background: var(--app-primary-dark);
+  color: var(--app-accent-gold);
+  font-size: 1.25rem;
+}
+
+h1 {
+  margin: 0;
+  color: var(--app-primary-dark);
+  font-size: 1.45rem;
+  line-height: 1.15;
+}
+
+.register-card__brand p,
+.register-card__login {
+  color: var(--app-muted-text);
+}
+
+.register-card__brand p {
+  margin: 0.45rem 0 0;
+  font-size: 0.92rem;
+}
+
+.register-card__message {
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.register-form__field label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--app-primary-dark);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.register-form__field input,
+.register-form__field p-password {
+  display: block;
+  width: 100%;
+}
+
+.register-form__field input,
+.register-form__password-input {
+  width: 100%;
+  min-height: 2.55rem;
+  border-color: var(--app-border);
+  border-radius: 0.55rem;
+  background: #fffdf8;
+  font-size: 0.92rem;
+}
+
+.register-form__field small {
+  display: block;
+  margin-top: 0.35rem;
+  color: #b42318;
+  font-size: 0.78rem;
+}
+
+.register-form__submit {
+  width: 100%;
+  min-height: 2.6rem;
+  margin-top: 0.25rem;
+}
+
+.register-card__login {
+  margin: 1rem 0 0;
+  font-size: 0.86rem;
+}
+
+.register-card__login a {
+  color: var(--app-accent);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.register-card__login a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 575px) {
+  .register-page {
+    padding: 1rem;
+  }
+
+  .register-card {
+    padding: 1.35rem;
+  }
+}

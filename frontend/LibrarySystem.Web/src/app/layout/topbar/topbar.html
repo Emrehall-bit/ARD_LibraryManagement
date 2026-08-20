@@ -37,5 +37,15 @@
       <span class="topbar__username">Kullanıcı</span>
       <i class="pi pi-angle-down topbar__chevron"></i>
     </div>
+
+    <p-button
+      icon="pi pi-sign-out"
+      label="Çıkış Yap"
+      severity="secondary"
+      [text]="true"
+      styleClass="topbar__logout-button"
+      ariaLabel="Çıkış yap"
+      (onClick)="logout()"
+    />
   </div>
 </header>
