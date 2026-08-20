@@ -13,7 +13,7 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> jwtOptions) : ITokenS
 {
     private readonly JwtOptions jwtOptions = jwtOptions.Value;
 
-    public AuthResponseDto CreateAccessToken(ApplicationUser user)
+    public AuthResponseDto CreateAccessToken(ApplicationUser user, IEnumerable<string> roles)
     {
         var expires = DateTime.UtcNow.AddMinutes(jwtOptions.ExpirationMinutes);
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key));
@@ -32,6 +32,8 @@ internal sealed class JwtTokenService(IOptions<JwtOptions> jwtOptions) : ITokenS
             claims.Add(new Claim(JwtRegisteredClaimNames.Email, user.Email));
             claims.Add(new Claim(ClaimTypes.Email, user.Email));
         }
+
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         var token = new JwtSecurityToken(
             jwtOptions.Issuer,

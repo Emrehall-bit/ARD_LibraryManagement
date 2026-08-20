@@ -1,4 +1,5 @@
 using LibrarySystem.Modules.Identity.Domain;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

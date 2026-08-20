@@ -2,6 +2,7 @@ using FluentValidation;
 using LibrarySystem.Modules.Identity.Application.Dtos;
 using LibrarySystem.Modules.Identity.Application.Interfaces;
 using LibrarySystem.Modules.Identity.Domain;
+using LibrarySystem.Shared.Authentication;
 using LibrarySystem.Shared.Exceptions;
 using Microsoft.AspNetCore.Identity;
 
@@ -63,7 +64,7 @@ internal sealed class AuthService(
             throw new InvalidOperationException(message);
         }
 
-        return tokenService.CreateAccessToken(user);
+        return tokenService.CreateAccessToken(user, new[] { IdentityRoles.Member });
     }
 
     public async Task<AuthResponseDto> LoginAsync(
@@ -79,7 +80,9 @@ internal sealed class AuthService(
             throw new AuthenticationFailedException("Invalid username or password.");
         }
 
-        return tokenService.CreateAccessToken(user);
+        var roles = await userManager.GetRolesAsync(user);
+
+        return tokenService.CreateAccessToken(user, roles);
     }
 
     private static string CreateIdentityErrorMessage(string message, IdentityResult result)

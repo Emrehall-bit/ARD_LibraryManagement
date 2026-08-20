@@ -7,6 +7,7 @@ using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
 using LibrarySystem.Modules.Identity.Domain;
 using LibrarySystem.Modules.Identity.Infrastructure;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,6 +43,10 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
         Assert.False(string.IsNullOrWhiteSpace(authResponse.AccessToken));
         Assert.True(authResponse.ExpiresIn > 0);
         Assert.Equal("Bearer", authResponse.TokenType);
+
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(authResponse.AccessToken);
+
+        AssertClaimValue(token, ClaimTypes.Role, IdentityRoles.Member);
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
@@ -196,6 +201,7 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
         AssertClaimValue(token, ClaimTypes.Name, request.Username);
         AssertClaimValue(token, JwtRegisteredClaimNames.Email, request.Email);
         AssertClaimValue(token, ClaimTypes.Email, request.Email);
+        AssertClaimValue(token, ClaimTypes.Role, IdentityRoles.Member);
         AssertClaimExists(token, JwtRegisteredClaimNames.Exp);
     }
 

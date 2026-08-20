@@ -1,4 +1,5 @@
 using System.Text;
+using System.Security.Claims;
 using FluentValidation;
 using LibrarySystem.Modules.Identity.Application.Dtos;
 using LibrarySystem.Modules.Identity.Application.Interfaces;
@@ -69,6 +70,7 @@ public static class DependencyInjection
                     ValidateIssuerSigningKey = true,
                     IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key)),
                     ValidateLifetime = true,
+                    RoleClaimType = ClaimTypes.Role,
                     ClockSkew = TimeSpan.FromMinutes(1)
                 };
             });

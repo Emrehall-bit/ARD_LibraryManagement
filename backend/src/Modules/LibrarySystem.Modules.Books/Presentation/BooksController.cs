@@ -1,5 +1,6 @@
 using LibrarySystem.Modules.Books.Application.Dtos;
 using LibrarySystem.Modules.Books.Application.Interfaces;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace LibrarySystem.Modules.Books.Presentation;
 
 [ApiController]
-[Authorize]
+[Authorize(Roles = IdentityRoles.Admin + "," + IdentityRoles.Member)]
 [Route("api/books")]
 public sealed class BooksController(IBookService bookService) : ControllerBase
 {
@@ -34,6 +35,7 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Roles = IdentityRoles.Admin)]
     [ProducesResponseType(typeof(BookResponseDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BookResponseDto>> Create(
@@ -46,6 +48,7 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Roles = IdentityRoles.Admin)]
     [ProducesResponseType(typeof(BookResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -60,6 +63,7 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = IdentityRoles.Admin)]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)

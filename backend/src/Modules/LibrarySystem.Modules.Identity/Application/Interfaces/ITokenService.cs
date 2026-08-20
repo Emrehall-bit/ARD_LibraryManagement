@@ -5,5 +5,5 @@ namespace LibrarySystem.Modules.Identity.Application.Interfaces;
 
 internal interface ITokenService
 {
-    AuthResponseDto CreateAccessToken(ApplicationUser user);
+    AuthResponseDto CreateAccessToken(ApplicationUser user, IEnumerable<string> roles);
 }

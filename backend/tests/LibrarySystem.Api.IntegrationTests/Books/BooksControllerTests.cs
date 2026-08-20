@@ -1,8 +1,12 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
 using LibrarySystem.Modules.Books.Infrastructure;
+using LibrarySystem.Modules.Identity.Domain;
+using LibrarySystem.Shared.Authentication;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -44,6 +48,55 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
 
         Assert.NotNull(books);
         Assert.Empty(books);
+    }
+
+    [Fact]
+    public async Task BooksEndpoints_WithMemberJwt_AllowReadAndForbidWrites()
+    {
+        using var adminClient = await CreateAuthenticatedJwtClientAsync(IdentityRoles.Admin);
+        var createdBook = await CreateBookAsync(adminClient);
+        using var memberClient = await CreateAuthenticatedJwtClientAsync(IdentityRoles.Member);
+
+        var getAllResponse = await memberClient.GetAsync("/api/books");
+        var getByIdResponse = await memberClient.GetAsync($"/api/books/{createdBook.Id}");
+        var createResponse = await memberClient.PostAsJsonAsync(
+            "/api/books",
+            new CreateBookRequest("Domain-Driven Design", "Eric Evans", 2));
+        var updateResponse = await memberClient.PutAsJsonAsync(
+            $"/api/books/{createdBook.Id}",
+            new UpdateBookRequest("Refactoring", "Martin Fowler", 5));
+        var deleteResponse = await memberClient.DeleteAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, getAllResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, getByIdResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, createResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, updateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, deleteResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task BooksEndpoints_WithAdminJwt_AllowReadAndWrites()
+    {
+        using var client = await CreateAuthenticatedJwtClientAsync(IdentityRoles.Admin);
+        var createRequest = new CreateBookRequest("Clean Architecture", "Robert C. Martin", 4);
+
+        var createResponse = await client.PostAsJsonAsync("/api/books", createRequest);
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var createdBook = await createResponse.Content.ReadFromJsonAsync<BookResponse>();
+
+        Assert.NotNull(createdBook);
+
+        var getResponse = await client.GetAsync($"/api/books/{createdBook.Id}");
+        var updateResponse = await client.PutAsJsonAsync(
+            $"/api/books/{createdBook.Id}",
+            new UpdateBookRequest("Refactoring", "Martin Fowler", 5));
+        var deleteResponse = await client.DeleteAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
     }
 
     [Fact]
@@ -224,9 +277,91 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         return book ?? throw new InvalidOperationException("Create book response body was empty.");
     }
 
+    private async Task<HttpClient> CreateAuthenticatedJwtClientAsync(string role)
+    {
+        var credentials = CreateUserCredentials();
+        AuthResponse authResponse;
+
+        if (role == IdentityRoles.Member)
+        {
+            using var anonymousClient = factory.CreateUnauthenticatedApiClient();
+            var registerResponse = await anonymousClient.PostAsJsonAsync(
+                "/api/auth/register",
+                new RegisterRequest(credentials.Username, credentials.Email, credentials.Password));
+
+            registerResponse.EnsureSuccessStatusCode();
+
+            authResponse = await registerResponse.Content.ReadFromJsonAsync<AuthResponse>()
+                ?? throw new InvalidOperationException("Register response body was empty.");
+        }
+        else if (role == IdentityRoles.Admin)
+        {
+            await CreateIdentityUserInRoleAsync(credentials, IdentityRoles.Admin);
+
+            using var anonymousClient = factory.CreateUnauthenticatedApiClient();
+            var loginResponse = await anonymousClient.PostAsJsonAsync(
+                "/api/auth/login",
+                new LoginRequest(credentials.Username, credentials.Password));
+
+            loginResponse.EnsureSuccessStatusCode();
+
+            authResponse = await loginResponse.Content.ReadFromJsonAsync<AuthResponse>()
+                ?? throw new InvalidOperationException("Login response body was empty.");
+        }
+        else
+        {
+            throw new ArgumentOutOfRangeException(nameof(role), role, "Unsupported test role.");
+        }
+
+        var client = factory.CreateUnauthenticatedApiClient();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+            authResponse.TokenType,
+            authResponse.AccessToken);
+
+        return client;
+    }
+
+    private async Task CreateIdentityUserInRoleAsync(UserCredentials credentials, string role)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = new ApplicationUser
+        {
+            Id = Guid.NewGuid(),
+            UserName = credentials.Username,
+            Email = credentials.Email
+        };
+
+        var createResult = await userManager.CreateAsync(user, credentials.Password);
+
+        Assert.True(createResult.Succeeded);
+
+        var roleResult = await userManager.AddToRoleAsync(user, role);
+
+        Assert.True(roleResult.Succeeded);
+    }
+
+    private static UserCredentials CreateUserCredentials()
+    {
+        var uniqueValue = Guid.NewGuid().ToString("N");
+
+        return new UserCredentials(
+            $"user-{uniqueValue}",
+            $"user-{uniqueValue}@example.test",
+            "ValidPassword123!");
+    }
+
     private sealed record CreateBookRequest(string Name, string Author, int Stock);
 
     private sealed record UpdateBookRequest(string Name, string Author, int Stock);
 
     private sealed record BookResponse(Guid Id, string Name, string Author, int Stock);
+
+    private sealed record RegisterRequest(string Username, string Email, string Password);
+
+    private sealed record LoginRequest(string Username, string Password);
+
+    private sealed record AuthResponse(string AccessToken, int ExpiresIn, string TokenType);
+
+    private sealed record UserCredentials(string Username, string Email, string Password);
 }

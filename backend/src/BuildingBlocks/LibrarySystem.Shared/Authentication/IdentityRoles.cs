@@ -1,4 +1,4 @@
-namespace LibrarySystem.Modules.Identity.Domain;
+namespace LibrarySystem.Shared.Authentication;
 
 public static class IdentityRoles
 {

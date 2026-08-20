@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,7 @@ internal sealed class TestAuthenticationHandler(
     public const string AuthenticationScheme = "Test";
     public const string HeaderName = "X-Test-User";
     public const string UserIdHeaderName = "X-Test-User-Id";
+    public const string RolesHeaderName = "X-Test-Roles";
     public const string UserName = "integration-test-user";
     public const string UserId = "integration-test-user-id";
 
@@ -29,11 +31,19 @@ internal sealed class TestAuthenticationHandler(
                 ? requestedUserId.ToString()
                 : UserId;
 
-        var claims = new[]
+        string[] roles = Request.Headers.TryGetValue(RolesHeaderName, out var requestedRoles) &&
+            !string.IsNullOrWhiteSpace(requestedRoles)
+                ? requestedRoles.ToString()
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                : [IdentityRoles.Admin];
+
+        var claims = new List<Claim>
         {
             new Claim(ClaimTypes.NameIdentifier, userId),
             new Claim(ClaimTypes.Name, userName!)
         };
+
+        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
         var identity = new ClaimsIdentity(claims, AuthenticationScheme);
         var principal = new ClaimsPrincipal(identity);

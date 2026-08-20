@@ -5,6 +5,7 @@ using LibrarySystem.Modules.Books.Domain;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Borrowing.Domain;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,6 +55,19 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Equal(TestAuthenticationHandler.UserId, storedBorrowRecord.UserId);
         Assert.Equal(bookId, storedBorrowRecord.BookId);
         Assert.Null(storedBorrowRecord.ReturnedAt);
+    }
+
+    [Theory]
+    [InlineData(IdentityRoles.Member)]
+    [InlineData(IdentityRoles.Admin)]
+    public async Task BorrowBook_WithAuthenticatedRole_ReturnsSuccess(string role)
+    {
+        using var client = CreateAuthenticatedClient(role, $"borrow-{role.ToLowerInvariant()}-user");
+        var bookId = await SeedBookAsync(stock: 1);
+
+        var response = await client.PostAsync($"/api/borrow/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -245,6 +259,17 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         await dbContext.BorrowRecords.AddAsync(borrowRecord);
         await dbContext.SaveChangesAsync();
+    }
+
+    private HttpClient CreateAuthenticatedClient(string role, string userId)
+    {
+        var client = factory.CreateUnauthenticatedApiClient();
+
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.HeaderName, userId);
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.UserIdHeaderName, userId);
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.RolesHeaderName, role);
+
+        return client;
     }
 
     private sealed record BorrowRecordResponse(
