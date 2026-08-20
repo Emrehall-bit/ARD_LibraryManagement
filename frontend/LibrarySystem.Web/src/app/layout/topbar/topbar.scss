@@ -27,23 +27,6 @@
   display: none;
 }
 
-:host ::ng-deep .topbar__menu .p-button,
-:host ::ng-deep .topbar__actions .p-button {
-  width: 2.25rem;
-  height: 2.25rem;
-  padding: 0;
-}
-
-:host ::ng-deep .topbar__actions .p-button {
-  color: rgba(255, 255, 255, 0.86);
-}
-
-:host ::ng-deep .topbar__actions .p-button:hover,
-:host ::ng-deep .topbar__menu .p-button:hover {
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.12);
-}
-
 .topbar__user {
   min-height: 2.375rem;
   margin-left: 0.25rem;

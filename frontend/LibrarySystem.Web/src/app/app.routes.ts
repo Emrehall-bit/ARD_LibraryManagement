@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { DashboardComponent } from './features/dashboard/dashboard';
 import { AppLayoutComponent } from './layout/app-layout/app-layout';
 
 export const routes: Routes = [
@@ -14,7 +15,7 @@ export const routes: Routes = [
       },
       {
         path: 'dashboard',
-        children: []
+        component: DashboardComponent
       },
       {
         path: 'books',

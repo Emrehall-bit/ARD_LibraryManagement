@@ -1,7 +1,7 @@
 :host {
   display: block;
   min-height: 100dvh;
-  --app-sidebar-width: 232px;
+  --app-sidebar-width: 218px;
   --app-topbar-height: 60px;
   --app-topbar-height-mobile: 56px;
 }
@@ -18,25 +18,15 @@
 
 .app-shell__sidebar {
   flex: 0 0 var(--app-sidebar-width);
-  background: var(--app-primary-dark);
-  border-right: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: var(--app-shadow);
+  background: var(--app-sidebar-background);
+  border-right: 1px solid var(--app-border);
+  box-shadow: 6px 0 18px rgba(32, 25, 15, 0.04);
 }
 
 .app-shell__content {
   flex: 1 1 auto;
   min-width: 0;
   padding: clamp(1.5rem, 2vw, 2rem);
-}
-
-:host ::ng-deep .app-mobile-drawer {
-  width: min(20rem, 86vw);
-  border: 0;
-  background: var(--app-primary-dark);
-}
-
-:host ::ng-deep .app-mobile-drawer .p-drawer-content {
-  padding: 0;
 }
 
 @media (max-width: 991px) {
