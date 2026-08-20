@@ -1,3 +1,5 @@
+<p-toast />
+
 <section class="books-page">
   <div class="books-page__header grid align-items-center">
     <div class="col-12 lg:col-5">
@@ -56,6 +58,15 @@
                 </div>
 
                 <p-tag [value]="getStockLabel(book.stock)" [severity]="getStockSeverity(book.stock)" />
+                <p-button
+                  label="Ödünç Al"
+                  icon="pi pi-bookmark"
+                  size="small"
+                  styleClass="book-card__borrow-button"
+                  [loading]="isBorrowing(book.id)"
+                  [disabled]="book.stock === 0 || isBorrowing(book.id)"
+                  (onClick)="borrowBook(book)"
+                />
               </article>
             </ng-template>
           </p-card>
