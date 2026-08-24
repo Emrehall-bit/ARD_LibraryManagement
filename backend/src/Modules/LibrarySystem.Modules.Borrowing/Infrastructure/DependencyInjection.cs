@@ -27,6 +27,7 @@ public static class DependencyInjection
 
         services.AddScoped<IBorrowRepository, BorrowRepository>();
         services.AddScoped<IBorrowingService, BorrowingService>();
+        services.AddScoped<IAdminBorrowingDashboardSummaryService, AdminBorrowingDashboardSummaryService>();
         services.AddScoped<IUserBorrowingSummaryService, UserBorrowingSummaryService>();
         services.AddScoped<IValidator<GetOverdueBorrowRecordsQueryDto>, GetOverdueBorrowRecordsQueryValidator>();
         services.AddSingleton<IBorrowingClock, SystemBorrowingClock>();

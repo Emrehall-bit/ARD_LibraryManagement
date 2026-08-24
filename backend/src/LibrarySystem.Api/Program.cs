@@ -1,4 +1,5 @@
 using LibrarySystem.Api.ExceptionHandling;
+using LibrarySystem.Api.AdminDashboard;
 using LibrarySystem.Api.Hubs;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Books.Infrastructure.Seeding;
@@ -81,6 +82,7 @@ builder.Services.AddBooksInfrastructure(databaseConnectionString);
 builder.Services.AddBorrowingInfrastructure(databaseConnectionString);
 builder.Services.AddIdentityInfrastructure(databaseConnectionString, builder.Configuration);
 builder.Services.AddScoped<IBookStockChangeNotifier, SignalRBookStockChangeNotifier>();
+builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 
 var app = builder.Build();
 
