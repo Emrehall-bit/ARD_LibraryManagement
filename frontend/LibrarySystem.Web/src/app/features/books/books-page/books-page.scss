@@ -58,8 +58,65 @@ h1 {
   font-size: 0.9rem;
 }
 
+:host ::ng-deep .books-page__view-toggle {
+  min-height: 2.35rem;
+}
+
+:host ::ng-deep .books-page__view-toggle .p-togglebutton {
+  min-height: 2.35rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
 .books-page__grid {
   row-gap: 0.75rem;
+}
+
+.books-management {
+  overflow-x: auto;
+  border: 1px solid rgba(226, 216, 199, 0.9);
+  border-radius: 0.75rem;
+  background: rgba(255, 253, 248, 0.96);
+  box-shadow: var(--app-shadow-soft);
+}
+
+:host ::ng-deep .books-management__table {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+:host ::ng-deep .books-management__table .p-datatable-thead > tr > th {
+  border-color: rgba(226, 216, 199, 0.9);
+  background: rgba(247, 241, 230, 0.92);
+  color: var(--app-primary-dark);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+:host ::ng-deep .books-management__table .p-datatable-tbody > tr > td {
+  border-color: rgba(226, 216, 199, 0.74);
+  color: var(--app-text);
+  font-size: 0.88rem;
+  vertical-align: middle;
+}
+
+.books-management__book-cell {
+  max-width: 20rem;
+}
+
+.books-management__book-cell strong {
+  display: block;
+  color: var(--app-primary-dark);
+  line-height: 1.2;
+}
+
+.books-management__actions-column {
+  width: 7.5rem;
+  text-align: right;
+}
+
+.books-management__row-actions {
+  min-width: 5.5rem;
 }
 
 .book-card {
@@ -274,5 +331,14 @@ h1 {
   :host ::ng-deep .books-page__filter-select,
   :host ::ng-deep .books-page__sort-select {
     width: 100%;
+  }
+
+  :host ::ng-deep .books-page__view-toggle {
+    width: 100%;
+  }
+
+  :host ::ng-deep .books-page__view-toggle .p-togglebutton {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }

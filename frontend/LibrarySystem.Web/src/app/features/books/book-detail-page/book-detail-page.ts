@@ -93,7 +93,8 @@ export class BookDetailPageComponent implements OnInit {
     }
 
     if (!this.isAuthenticated()) {
-      this.router.navigate(['/login']);
+      const returnUrl = this.router.createUrlTree(['/books', currentBook.id]).toString();
+      this.router.navigate(['/login'], { queryParams: { returnUrl } });
       return;
     }
 

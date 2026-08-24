@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
 import { InputTextModule } from 'primeng/inputtext';
@@ -9,6 +9,7 @@ import { MessageModule } from 'primeng/message';
 import { PasswordModule } from 'primeng/password';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
+import { getSafeReturnUrl } from '../../../core/auth/auth-return-url';
 import { AuthApiService } from '../services/auth-api.service';
 
 type RegisterControlName = 'username' | 'email' | 'password';
@@ -30,10 +31,14 @@ export class RegisterComponent {
   private readonly authApi = inject(AuthApiService);
   private readonly authState = inject(AuthStateService);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   protected readonly isSubmitting = signal(false);
   protected readonly registerError = signal<string | null>(null);
+  protected readonly loginQueryParams = {
+    returnUrl: this.route.snapshot.queryParamMap.get('returnUrl')
+  };
 
   protected readonly registerForm = this.formBuilder.nonNullable.group({
     username: ['', Validators.required],
@@ -61,7 +66,7 @@ export class RegisterComponent {
       .subscribe({
         next: (response) => {
           this.authState.setAuthenticated(response.accessToken);
-          void this.router.navigate(['/dashboard']);
+          void this.router.navigateByUrl(this.getReturnUrl());
         },
         error: (error: unknown) => {
           this.registerError.set(this.getRegisterErrorMessage(error));
@@ -119,6 +124,10 @@ export class RegisterComponent {
     const body = error.error as { detail?: unknown } | null;
 
     return typeof body?.detail === 'string' ? body.detail : null;
+  }
+
+  private getReturnUrl(): string {
+    return getSafeReturnUrl(this.route.snapshot.queryParamMap.get('returnUrl'));
   }
 
   private getRequiredMessage(controlName: RegisterControlName): string {

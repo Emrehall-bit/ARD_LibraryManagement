@@ -56,6 +56,17 @@
         <p-button label="Ara" icon="pi pi-search" size="small" (onClick)="searchBooks()" />
 
         @if (isAdmin()) {
+          <p-selectbutton
+            styleClass="books-page__view-toggle"
+            [options]="viewOptions"
+            [ngModel]="selectedView()"
+            optionLabel="label"
+            optionValue="value"
+            [allowEmpty]="false"
+            size="small"
+            aria-label="Görünüm seç"
+            (ngModelChange)="updateView($any($event))"
+          />
           <p-button label="Kitap Ekle" icon="pi pi-plus" size="small" (onClick)="openCreateDialog()" />
         }
       </div>
@@ -77,7 +88,66 @@
       <strong>{{ getEmptyStateMessage() }}</strong>
     </div>
   } @else {
-    <div class="grid books-page__grid">
+    @if (isManagementView()) {
+      <div class="books-management">
+        <p-table
+          [value]="books()"
+          [scrollable]="true"
+          styleClass="books-management__table"
+          [tableStyle]="{ 'min-width': '52rem' }"
+        >
+          <ng-template pTemplate="header">
+            <tr>
+              <th>Kitap</th>
+              <th>Yazar</th>
+              <th>Tür</th>
+              <th>Stok</th>
+              <th class="books-management__actions-column">İşlemler</th>
+            </tr>
+          </ng-template>
+          <ng-template pTemplate="body" let-book>
+            <tr>
+              <td>
+                <div class="books-management__book-cell">
+                  <strong>{{ book.name }}</strong>
+                </div>
+              </td>
+              <td>{{ book.author }}</td>
+              <td>{{ getCategoryLabel(book.category) }}</td>
+              <td>
+                <p-tag [value]="getStockLabel(book.stock)" [severity]="getStockSeverity(book.stock)" />
+              </td>
+              <td>
+                <div class="books-management__row-actions flex gap-2 justify-content-end">
+                  <p-button
+                    icon="pi pi-pencil"
+                    size="small"
+                    severity="secondary"
+                    [rounded]="true"
+                    [text]="true"
+                    ariaLabel="Düzenle"
+                    [disabled]="isDeleting(book.id)"
+                    (onClick)="openEditDialog(book)"
+                  />
+                  <p-button
+                    icon="pi pi-trash"
+                    size="small"
+                    severity="danger"
+                    [rounded]="true"
+                    [text]="true"
+                    ariaLabel="Sil"
+                    [loading]="isDeleting(book.id)"
+                    [disabled]="isDeleting(book.id)"
+                    (onClick)="confirmDeleteBook(book)"
+                  />
+                </div>
+              </td>
+            </tr>
+          </ng-template>
+        </p-table>
+      </div>
+    } @else {
+      <div class="grid books-page__grid">
       @for (book of books(); track book.id) {
         <div class="col-12 sm:col-6 lg:col-4 xl:col-3">
           <p-card styleClass="book-card">
@@ -142,7 +212,8 @@
           </p-card>
         </div>
       }
-    </div>
+      </div>
+    }
 
     <p-paginator
       [first]="(page() - 1) * pageSize()"

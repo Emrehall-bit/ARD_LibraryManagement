@@ -13,6 +13,8 @@ import { MessageModule } from 'primeng/message';
 import { PaginatorModule } from 'primeng/paginator';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { SelectModule } from 'primeng/select';
+import { SelectButtonModule } from 'primeng/selectbutton';
+import { TableModule } from 'primeng/table';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
@@ -31,6 +33,7 @@ type EditBookControlName = 'name' | 'author' | 'stock' | 'category';
 type BooksPageChangeEvent = { first?: number; rows?: number; page?: number };
 type BookSortOptionValue = `${BookSortBy}:${BookSortDirection}`;
 type CategoryFilterValue = BookCategory | 'all';
+type BooksViewMode = 'catalog' | 'management';
 
 interface BookSortOption {
   label: string;
@@ -49,6 +52,11 @@ interface CategoryFilterOption {
   value: CategoryFilterValue;
 }
 
+interface BooksViewOption {
+  label: string;
+  value: BooksViewMode;
+}
+
 @Component({
   selector: 'app-books-page',
   imports: [
@@ -64,6 +72,8 @@ interface CategoryFilterOption {
     ProgressSpinnerModule,
     ReactiveFormsModule,
     SelectModule,
+    SelectButtonModule,
+    TableModule,
     TagModule,
     ToastModule
   ],
@@ -91,6 +101,7 @@ export class BooksPageComponent implements OnInit {
   protected readonly selectedSort = signal<BookSortOptionValue>('name:asc');
   protected readonly stockStatus = signal<BookStockStatus>('all');
   protected readonly selectedCategory = signal<CategoryFilterValue>('all');
+  protected readonly selectedView = signal<BooksViewMode>('catalog');
   protected readonly totalCount = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly borrowingBookId = signal<string | null>(null);
@@ -105,6 +116,10 @@ export class BooksPageComponent implements OnInit {
   protected readonly isAdmin = this.authState.isAdmin;
   protected readonly isAuthenticated = this.authState.isAuthenticated;
   protected readonly pageSizeOptions = [20, 40, 60, 100];
+  protected readonly viewOptions: BooksViewOption[] = [
+    { label: 'Kart Görünümü', value: 'catalog' },
+    { label: 'Yönetim Görünümü', value: 'management' }
+  ];
   protected readonly sortOptions: BookSortOption[] = [
     { label: 'Kitap Adı (A-Z)', value: 'name:asc', sortBy: 'name', sortDirection: 'asc' },
     { label: 'Kitap Adı (Z-A)', value: 'name:desc', sortBy: 'name', sortDirection: 'desc' },
@@ -186,6 +201,19 @@ export class BooksPageComponent implements OnInit {
     this.selectedCategory.set(value);
     this.page.set(1);
     this.loadBooks();
+  }
+
+  protected updateView(value: BooksViewMode): void {
+    if (!this.isAdmin() && value === 'management') {
+      this.selectedView.set('catalog');
+      return;
+    }
+
+    this.selectedView.set(value);
+  }
+
+  protected isManagementView(): boolean {
+    return this.isAdmin() && this.selectedView() === 'management';
   }
 
   protected handlePageChange(event: BooksPageChangeEvent): void {
@@ -291,7 +319,8 @@ export class BooksPageComponent implements OnInit {
     }
 
     if (!this.isAuthenticated()) {
-      this.router.navigate(['/login']);
+      const returnUrl = this.router.createUrlTree(['/books']).toString();
+      this.router.navigate(['/login'], { queryParams: { returnUrl } });
       return;
     }
 
