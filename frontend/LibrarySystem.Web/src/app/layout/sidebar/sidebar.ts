@@ -25,6 +25,13 @@ export class SidebarComponent {
     { label: 'Ödünç Aldıklarım', icon: 'pi pi-bookmark', route: '/my-books', requiresAuthentication: true },
     { label: 'Ödünç Geçmişim', icon: 'pi pi-history', route: '/borrow-history', requiresAuthentication: true },
     {
+      label: 'Kullanıcılar',
+      icon: 'pi pi-users',
+      route: '/admin/users',
+      requiresAuthentication: true,
+      requiresAdmin: true
+    },
+    {
       label: 'Gecikmiş Ödünçler',
       icon: 'pi pi-exclamation-triangle',
       route: '/admin/overdue-borrows',

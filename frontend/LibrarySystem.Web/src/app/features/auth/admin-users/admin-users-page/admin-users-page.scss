@@ -1,0 +1,87 @@
+.admin-users-page {
+  color: var(--app-text);
+}
+
+.admin-users-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.95rem;
+}
+
+.admin-users-page__toolbar {
+  flex: 0 1 32rem;
+  justify-content: flex-end;
+}
+
+.admin-users-page__search {
+  flex: 1 1 18rem;
+}
+
+.admin-users-page__search input {
+  width: 100%;
+}
+
+.admin-users-page__state {
+  min-height: 16rem;
+}
+
+.admin-users-page__state span,
+.admin-users-page__state strong {
+  font-size: 0.92rem;
+}
+
+.admin-users-page__message {
+  display: block;
+}
+
+.admin-users-table {
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.admin-users-table__table {
+  font-size: 0.88rem;
+}
+
+.admin-users-table__username,
+.admin-users-table__email {
+  display: block;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.admin-users-table__username {
+  max-width: 14rem;
+  color: var(--app-primary-dark);
+}
+
+.admin-users-table__email {
+  max-width: 18rem;
+}
+
+.admin-users-table__overdue-count--danger {
+  color: #b42318;
+}
+
+@media (max-width: 767px) {
+  .admin-users-page__header {
+    flex-direction: column;
+    margin-bottom: 0.8rem;
+  }
+
+  .admin-users-page__toolbar {
+    width: 100%;
+  }
+}
+
+@media (max-width: 575px) {
+  .admin-users-page__toolbar {
+    flex-direction: column;
+  }
+
+  .admin-users-page__toolbar p-button {
+    width: 100%;
+  }
+}

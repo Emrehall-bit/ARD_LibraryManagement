@@ -57,6 +57,14 @@ export const routes: Routes = [
           import('./features/borrowing/admin-overdue-borrows-page/admin-overdue-borrows-page').then(
             (component) => component.AdminOverdueBorrowsPageComponent
           )
+      },
+      {
+        path: 'admin/users',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/auth/admin-users/admin-users-page/admin-users-page').then(
+            (component) => component.AdminUsersPageComponent
+          )
       }
     ]
   },

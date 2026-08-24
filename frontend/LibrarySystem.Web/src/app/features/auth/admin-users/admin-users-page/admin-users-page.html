@@ -1,0 +1,100 @@
+<section class="admin-users-page">
+  <div class="admin-users-page__header">
+    <div>
+      <h1 class="app-page-title">Kullanıcılar</h1>
+      <p class="app-page-subtitle">Sistemdeki üyeleri ve ödünç durumlarını görüntüleyin.</p>
+    </div>
+
+    <form class="admin-users-page__toolbar flex gap-2" (ngSubmit)="searchUsers()">
+      <span class="p-input-icon-left admin-users-page__search">
+        <i class="pi pi-search"></i>
+        <input
+          pInputText
+          type="search"
+          name="adminUserSearch"
+          placeholder="Kullanıcı adı veya e-posta ara..."
+          [ngModel]="searchTerm()"
+          (ngModelChange)="updateSearchTerm($event)"
+        />
+      </span>
+      <p-button label="Ara" icon="pi pi-search" type="submit" />
+    </form>
+  </div>
+
+  @if (isLoading()) {
+    <div class="admin-users-page__state app-page-state flex flex-column align-items-center justify-content-center">
+      <p-progress-spinner ariaLabel="Kullanıcılar yükleniyor" />
+      <span>Kullanıcılar yükleniyor...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <p-message severity="error" size="small" class="admin-users-page__message">
+      {{ errorMessage() }}
+    </p-message>
+  } @else if (users().length === 0) {
+    <div class="admin-users-page__state app-page-state">
+      <i class="pi pi-users"></i>
+      <strong>
+        {{ hasActiveSearch() ? 'Aramanızla eşleşen kullanıcı bulunamadı.' : 'Kayıtlı kullanıcı bulunmuyor.' }}
+      </strong>
+    </div>
+  } @else {
+    <div class="admin-users-table app-card-surface">
+      <p-table
+        [value]="users()"
+        [scrollable]="true"
+        styleClass="admin-users-table__table"
+        [tableStyle]="{ 'min-width': '68rem' }"
+      >
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Kullanıcı</th>
+            <th>E-posta</th>
+            <th>Rol</th>
+            <th>Aktif Ödünç</th>
+            <th>Gecikmiş</th>
+            <th>Durum</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-user>
+          <tr>
+            <td>
+              <strong class="admin-users-table__username">{{ user.username }}</strong>
+            </td>
+            <td>
+              <span class="admin-users-table__email">{{ user.email }}</span>
+            </td>
+            <td>
+              <div class="admin-users-table__roles flex flex-wrap gap-1">
+                @for (role of user.roles; track role) {
+                  <p-tag [value]="getRoleLabel(role)" [severity]="getRoleSeverity(role)" />
+                }
+              </div>
+            </td>
+            <td>
+              <strong>{{ user.activeBorrowCount }}</strong>
+            </td>
+            <td>
+              <strong [class.admin-users-table__overdue-count--danger]="user.overdueBorrowCount > 0">
+                {{ user.overdueBorrowCount }}
+              </strong>
+            </td>
+            <td>
+              <p-tag [value]="getUserStatusLabel(user)" [severity]="getUserStatusSeverity(user)" />
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <p-paginator
+      [first]="(page() - 1) * pageSize()"
+      [rows]="pageSize()"
+      [totalRecords]="totalCount()"
+      [rowsPerPageOptions]="pageSizeOptions"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="{first} - {last} / {totalRecords}"
+      (onPageChange)="handlePageChange($event)"
+    />
+  }
+</section>
