@@ -1,4 +1,5 @@
 using LibrarySystem.Modules.Borrowing.Domain;
+using LibrarySystem.Modules.Borrowing.Application.Models;
 
 namespace LibrarySystem.Modules.Borrowing.Application.Interfaces;
 
@@ -19,6 +20,12 @@ public interface IBorrowRepository
 
     Task<bool> HasOverdueBorrowsAsync(
         string userId,
+        DateTime utcNow,
+        CancellationToken cancellationToken = default);
+
+    Task<BorrowRecordPage> GetOverduePageAsync(
+        int page,
+        int pageSize,
         DateTime utcNow,
         CancellationToken cancellationToken = default);
 

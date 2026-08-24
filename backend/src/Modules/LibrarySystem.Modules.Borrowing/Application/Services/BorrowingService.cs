@@ -1,7 +1,9 @@
+using FluentValidation;
 using LibrarySystem.Modules.Books.Application.Contracts;
 using LibrarySystem.Modules.Borrowing.Application.Dtos;
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Domain;
+using LibrarySystem.Modules.Identity.Application.Contracts;
 using LibrarySystem.Shared.Authentication;
 using LibrarySystem.Shared.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -12,11 +14,13 @@ internal sealed class BorrowingService(
     IBorrowRepository borrowRepository,
     IBookInventoryService bookInventoryService,
     IBookLookupService bookLookupService,
+    IUserDirectory userDirectory,
     ICurrentUser currentUser,
     IBorrowingClock clock,
     IBorrowingTransactionCoordinator transactionCoordinator,
     IBookStockChangeNotifier bookStockChangeNotifier,
-    ILogger<BorrowingService> logger) : IBorrowingService
+    ILogger<BorrowingService> logger,
+    IValidator<GetOverdueBorrowRecordsQueryDto> getOverdueBorrowRecordsQueryValidator) : IBorrowingService
 {
     public async Task<BorrowRecordResponseDto> BorrowBookAsync(
         Guid bookId,
@@ -163,6 +167,50 @@ internal sealed class BorrowingService(
         return MapToResponseDtos(borrowRecords, booksById);
     }
 
+    public async Task<PagedOverdueBorrowRecordsResponseDto> GetOverdueAsync(
+        GetOverdueBorrowRecordsQueryDto query,
+        CancellationToken cancellationToken = default)
+    {
+        await getOverdueBorrowRecordsQueryValidator.ValidateAndThrowAsync(query, cancellationToken);
+
+        var utcNow = clock.UtcNow;
+        var page = await borrowRepository.GetOverduePageAsync(
+            query.Page,
+            query.PageSize,
+            utcNow,
+            cancellationToken);
+
+        var bookIds = page.Items
+            .Select(borrowRecord => borrowRecord.BookId)
+            .Distinct()
+            .ToArray();
+        var userIds = page.Items
+            .Select(borrowRecord => borrowRecord.UserId)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var books = await bookLookupService.GetByIdsAsync(bookIds, cancellationToken);
+        var users = await userDirectory.GetByIdsAsync(userIds, cancellationToken);
+        var booksById = books.ToDictionary(book => book.Id);
+        var usersById = users.ToDictionary(user => user.Id, StringComparer.OrdinalIgnoreCase);
+        var totalPages = page.TotalCount == 0
+            ? 0
+            : (int)Math.Ceiling(page.TotalCount / (double)page.PageSize);
+
+        return new PagedOverdueBorrowRecordsResponseDto(
+            page.Items
+                .Select(borrowRecord => MapToOverdueResponseDto(
+                    borrowRecord,
+                    utcNow,
+                    booksById.GetValueOrDefault(borrowRecord.BookId),
+                    usersById.GetValueOrDefault(borrowRecord.UserId)))
+                .ToList(),
+            page.Page,
+            page.PageSize,
+            page.TotalCount,
+            totalPages);
+    }
+
     private string GetCurrentUserId()
     {
         if (!currentUser.IsAuthenticated || string.IsNullOrWhiteSpace(currentUser.UserId))
@@ -226,6 +274,26 @@ internal sealed class BorrowingService(
             borrowRecord.GetStatus(utcNow).ToString(),
             borrowRecord.RenewalCount,
             borrowRecord.GetOverdueDays(utcNow));
+    }
+
+    private static OverdueBorrowRecordResponseDto MapToOverdueResponseDto(
+        BorrowRecord borrowRecord,
+        DateTime utcNow,
+        BookLookupItem? book,
+        UserDirectoryItem? user)
+    {
+        return new OverdueBorrowRecordResponseDto(
+            borrowRecord.Id,
+            borrowRecord.UserId,
+            user?.Username ?? borrowRecord.UserId,
+            borrowRecord.BookId,
+            book?.Name,
+            book?.Author,
+            borrowRecord.BorrowedAt,
+            borrowRecord.DueDate,
+            borrowRecord.GetOverdueDays(utcNow),
+            borrowRecord.RenewalCount,
+            BorrowStatus.Overdue.ToString());
     }
 
     private sealed record BorrowingStockChangeResult(

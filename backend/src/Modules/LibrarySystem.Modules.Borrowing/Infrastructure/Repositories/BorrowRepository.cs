@@ -1,4 +1,5 @@
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
+using LibrarySystem.Modules.Borrowing.Application.Models;
 using LibrarySystem.Modules.Borrowing.Domain;
 using LibrarySystem.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
@@ -60,6 +61,29 @@ internal sealed class BorrowRepository(BorrowingDbContext dbContext) : IBorrowRe
                     borrowRecord.ReturnedAt == null &&
                     borrowRecord.DueDate < utcNow,
                 cancellationToken);
+    }
+
+    public async Task<BorrowRecordPage> GetOverduePageAsync(
+        int page,
+        int pageSize,
+        DateTime utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        var query = dbContext.BorrowRecords
+            .AsNoTracking()
+            .Where(borrowRecord =>
+                borrowRecord.ReturnedAt == null &&
+                borrowRecord.DueDate < utcNow);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .OrderBy(borrowRecord => borrowRecord.DueDate)
+            .ThenBy(borrowRecord => borrowRecord.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new BorrowRecordPage(items, page, pageSize, totalCount);
     }
 
     public async Task AddAsync(

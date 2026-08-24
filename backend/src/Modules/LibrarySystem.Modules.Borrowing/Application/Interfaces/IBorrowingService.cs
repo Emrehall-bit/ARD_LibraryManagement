@@ -21,4 +21,8 @@ public interface IBorrowingService
 
     Task<IReadOnlyList<BorrowRecordResponseDto>> GetHistoryAsync(
         CancellationToken cancellationToken = default);
+
+    Task<PagedOverdueBorrowRecordsResponseDto> GetOverdueAsync(
+        GetOverdueBorrowRecordsQueryDto query,
+        CancellationToken cancellationToken = default);
 }

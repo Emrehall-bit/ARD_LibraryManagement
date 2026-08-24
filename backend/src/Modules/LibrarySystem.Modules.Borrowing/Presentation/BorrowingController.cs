@@ -1,5 +1,6 @@
 using LibrarySystem.Modules.Borrowing.Application.Dtos;
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
+using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -71,6 +72,21 @@ public sealed class BorrowingController(IBorrowingService borrowingService) : Co
         CancellationToken cancellationToken)
     {
         var borrowRecords = await borrowingService.GetHistoryAsync(cancellationToken);
+
+        return Ok(borrowRecords);
+    }
+
+    [HttpGet("overdue")]
+    [Authorize(Roles = IdentityRoles.Admin)]
+    [ProducesResponseType(typeof(PagedOverdueBorrowRecordsResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    public async Task<ActionResult<PagedOverdueBorrowRecordsResponseDto>> GetOverdue(
+        [FromQuery] GetOverdueBorrowRecordsQueryDto query,
+        CancellationToken cancellationToken)
+    {
+        var borrowRecords = await borrowingService.GetOverdueAsync(query, cancellationToken);
 
         return Ok(borrowRecords);
     }

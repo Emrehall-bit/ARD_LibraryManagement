@@ -5,6 +5,8 @@ using LibrarySystem.Modules.Books.Domain;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Borrowing.Domain;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
+using LibrarySystem.Modules.Identity.Domain;
+using LibrarySystem.Modules.Identity.Infrastructure;
 using LibrarySystem.Shared.Authentication;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -850,6 +852,155 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetOverdue_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+
+        var response = await client.GetAsync("/api/borrow/overdue");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetOverdue_WithMemberRole_ReturnsForbidden()
+    {
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, Guid.NewGuid().ToString());
+
+        var response = await client.GetAsync("/api/borrow/overdue");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task GetOverdue_WithAdminRole_ReturnsOnlyActiveOverdueBorrowsWithMetadata()
+    {
+        using var client = CreateAuthenticatedClient(IdentityRoles.Admin, Guid.NewGuid().ToString());
+        var firstUserId = Guid.NewGuid();
+        var secondUserId = Guid.NewGuid();
+        await SeedIdentityUserAsync(firstUserId, "overdue-reader-one");
+        await SeedIdentityUserAsync(secondUserId, "overdue-reader-two");
+
+        var oldestDueBookId = await SeedBookAsync(
+            name: "Oldest Overdue Book",
+            author: "First Author",
+            stock: 2);
+        var newerDueBookId = await SeedBookAsync(
+            name: "Newer Overdue Book",
+            author: "Second Author",
+            stock: 2);
+        var activeBookId = await SeedBookAsync(name: "Still Borrowed Book", stock: 2);
+        var returnedBookId = await SeedBookAsync(name: "Returned Overdue Book", stock: 2);
+        var oldestDueDate = DateTime.UtcNow.Date.AddDays(-5);
+        var newerDueDate = DateTime.UtcNow.Date.AddDays(-2);
+
+        await SeedBorrowRecordAsync(
+            firstUserId.ToString(),
+            oldestDueBookId,
+            borrowedAt: oldestDueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: oldestDueDate,
+            renewalCount: 1);
+        await SeedBorrowRecordAsync(
+            secondUserId.ToString(),
+            newerDueBookId,
+            borrowedAt: newerDueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: newerDueDate);
+        await SeedBorrowRecordAsync(
+            firstUserId.ToString(),
+            activeBookId,
+            dueDate: DateTime.UtcNow.AddDays(2));
+        await SeedBorrowRecordAsync(
+            secondUserId.ToString(),
+            returnedBookId,
+            borrowedAt: oldestDueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: oldestDueDate,
+            returnedAt: DateTime.UtcNow.AddDays(-1));
+
+        var response = await client.GetAsync("/api/borrow/overdue");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content.ReadFromJsonAsync<PagedOverdueBorrowRecordsResponse>();
+
+        Assert.NotNull(page);
+        Assert.Equal(1, page.Page);
+        Assert.Equal(20, page.PageSize);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(1, page.TotalPages);
+        Assert.Equal([oldestDueBookId, newerDueBookId], page.Items.Select(item => item.BookId));
+
+        var oldestDueRecord = page.Items[0];
+        Assert.Equal(firstUserId.ToString(), oldestDueRecord.UserId);
+        Assert.Equal("overdue-reader-one", oldestDueRecord.Username);
+        Assert.Equal("Oldest Overdue Book", oldestDueRecord.BookName);
+        Assert.Equal("First Author", oldestDueRecord.Author);
+        Assert.Equal(oldestDueDate, oldestDueRecord.DueDate);
+        Assert.Equal(5, oldestDueRecord.OverdueDays);
+        Assert.Equal(1, oldestDueRecord.RenewalCount);
+        Assert.Equal(nameof(BorrowStatus.Overdue), oldestDueRecord.Status);
+
+        Assert.DoesNotContain(page.Items, item => item.BookId == activeBookId);
+        Assert.DoesNotContain(page.Items, item => item.BookId == returnedBookId);
+    }
+
+    [Fact]
+    public async Task GetOverdue_WithPagination_ReturnsRequestedPageAndTotalCount()
+    {
+        using var client = CreateAuthenticatedClient(IdentityRoles.Admin, Guid.NewGuid().ToString());
+        var userId = Guid.NewGuid();
+        await SeedIdentityUserAsync(userId, "paged-overdue-reader");
+
+        var firstBookId = await SeedBookAsync(name: "First Paged Overdue", stock: 2);
+        var secondBookId = await SeedBookAsync(name: "Second Paged Overdue", stock: 2);
+        var thirdBookId = await SeedBookAsync(name: "Third Paged Overdue", stock: 2);
+        var baseDueDate = DateTime.UtcNow.Date.AddDays(-6);
+
+        await SeedBorrowRecordAsync(
+            userId.ToString(),
+            firstBookId,
+            borrowedAt: baseDueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: baseDueDate);
+        await SeedBorrowRecordAsync(
+            userId.ToString(),
+            secondBookId,
+            borrowedAt: baseDueDate.AddDays(1 - BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: baseDueDate.AddDays(1));
+        await SeedBorrowRecordAsync(
+            userId.ToString(),
+            thirdBookId,
+            borrowedAt: baseDueDate.AddDays(2 - BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: baseDueDate.AddDays(2));
+
+        var response = await client.GetAsync("/api/borrow/overdue?page=2&pageSize=1");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content.ReadFromJsonAsync<PagedOverdueBorrowRecordsResponse>();
+
+        Assert.NotNull(page);
+        Assert.Equal(2, page.Page);
+        Assert.Equal(1, page.PageSize);
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal(3, page.TotalPages);
+
+        var item = Assert.Single(page.Items);
+        Assert.Equal(secondBookId, item.BookId);
+    }
+
+    [Theory]
+    [InlineData("/api/borrow/overdue?page=0")]
+    [InlineData("/api/borrow/overdue?pageSize=0")]
+    [InlineData("/api/borrow/overdue?pageSize=101")]
+    public async Task GetOverdue_WithInvalidPagination_ReturnsBadRequest(string url)
+    {
+        using var client = CreateAuthenticatedClient(IdentityRoles.Admin, Guid.NewGuid().ToString());
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
     private async Task<Guid> SeedBookAsync(
         string name = "Clean Code",
         string author = "Robert C. Martin",
@@ -863,6 +1014,23 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         await dbContext.SaveChangesAsync();
 
         return book.Id;
+    }
+
+    private async Task SeedIdentityUserAsync(Guid id, string username)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<IdentityDbContext>();
+
+        await dbContext.Users.AddAsync(new ApplicationUser
+        {
+            Id = id,
+            UserName = username,
+            NormalizedUserName = username.ToUpperInvariant(),
+            Email = $"{username}@example.com",
+            NormalizedEmail = $"{username}@example.com".ToUpperInvariant(),
+            EmailConfirmed = true
+        });
+        await dbContext.SaveChangesAsync();
     }
 
     private static DateTime CreateRecentBorrowedAt()
@@ -931,6 +1099,26 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         string Status,
         int RenewalCount,
         int OverdueDays);
+
+    private sealed record PagedOverdueBorrowRecordsResponse(
+        IReadOnlyList<OverdueBorrowRecordResponse> Items,
+        int Page,
+        int PageSize,
+        int TotalCount,
+        int TotalPages);
+
+    private sealed record OverdueBorrowRecordResponse(
+        Guid Id,
+        string UserId,
+        string Username,
+        Guid BookId,
+        string? BookName,
+        string? Author,
+        DateTime BorrowedAt,
+        DateTime DueDate,
+        int OverdueDays,
+        int RenewalCount,
+        string Status);
 
     private sealed record ProblemDetailsResponse(
         string? Title,

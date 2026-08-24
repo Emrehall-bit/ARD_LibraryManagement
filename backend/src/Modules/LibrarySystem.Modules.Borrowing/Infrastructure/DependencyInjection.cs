@@ -1,5 +1,8 @@
+using FluentValidation;
+using LibrarySystem.Modules.Borrowing.Application.Dtos;
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Application.Services;
+using LibrarySystem.Modules.Borrowing.Application.Validators;
 using LibrarySystem.Modules.Borrowing.Infrastructure.Repositories;
 using LibrarySystem.Modules.Borrowing.Infrastructure.Transactions;
 using Microsoft.EntityFrameworkCore;
@@ -22,6 +25,7 @@ public static class DependencyInjection
 
         services.AddScoped<IBorrowRepository, BorrowRepository>();
         services.AddScoped<IBorrowingService, BorrowingService>();
+        services.AddScoped<IValidator<GetOverdueBorrowRecordsQueryDto>, GetOverdueBorrowRecordsQueryValidator>();
         services.AddSingleton<IBorrowingClock, SystemBorrowingClock>();
         services.AddScoped<IBorrowingTransactionCoordinator, BorrowingTransactionCoordinator>();
 
