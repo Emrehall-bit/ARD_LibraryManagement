@@ -3,6 +3,7 @@ using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Books.Infrastructure.Seeding;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure;
+using LibrarySystem.Modules.Identity.Infrastructure.AdminBootstrap;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 
@@ -85,6 +86,7 @@ await app.Services.SeedIdentityAsync();
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
+    await app.Services.BootstrapDevelopmentAdminAsync(app.Configuration);
     await app.Services.SeedBooksAsync();
 }
 

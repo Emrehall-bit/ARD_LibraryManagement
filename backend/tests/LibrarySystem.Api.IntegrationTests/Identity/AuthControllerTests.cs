@@ -7,9 +7,11 @@ using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
 using LibrarySystem.Modules.Identity.Domain;
 using LibrarySystem.Modules.Identity.Infrastructure;
+using LibrarySystem.Modules.Identity.Infrastructure.AdminBootstrap;
 using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace LibrarySystem.Api.IntegrationTests.Identity;
@@ -59,6 +61,7 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
         Assert.True(await userManager.IsInRoleAsync(user, IdentityRoles.Member));
+        Assert.False(await userManager.IsInRoleAsync(user, IdentityRoles.Admin));
     }
 
     [Fact]
@@ -116,6 +119,160 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
 
             Assert.True(await userManager.IsInRoleAsync(user, IdentityRoles.Member));
         }
+    }
+
+    [Fact]
+    public async Task BootstrapDevelopmentAdminAsync_WithNoConfiguration_DoesNotCreateAdminUser()
+    {
+        await factory.Services.BootstrapDevelopmentAdminAsync(new ConfigurationBuilder().Build());
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        Assert.Equal(0, await userManager.Users.CountAsync());
+    }
+
+    [Fact]
+    public async Task BootstrapDevelopmentAdminAsync_WithIncompleteConfiguration_DoesNotCreateAdminUser()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AdminBootstrapOptions.SectionName}:Username"] = CreateUsername(),
+                [$"{AdminBootstrapOptions.SectionName}:Password"] = "ValidAdminPassword123!"
+            })
+            .Build();
+
+        await factory.Services.BootstrapDevelopmentAdminAsync(configuration);
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+        Assert.Equal(0, await userManager.Users.CountAsync());
+    }
+
+    [Fact]
+    public async Task BootstrapDevelopmentAdminAsync_WithConfiguration_CreatesAdminUser()
+    {
+        var credentials = CreateAdminBootstrapCredentials();
+
+        await factory.Services.BootstrapDevelopmentAdminAsync(CreateAdminBootstrapConfiguration(credentials));
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.FindByNameAsync(credentials.Username);
+
+        Assert.NotNull(user);
+        Assert.Equal(credentials.Email, user.Email);
+        Assert.True(await userManager.IsInRoleAsync(user, IdentityRoles.Admin));
+    }
+
+    [Fact]
+    public async Task BootstrapDevelopmentAdminAsync_WhenRunRepeatedly_DoesNotCreateDuplicateUserOrRole()
+    {
+        var credentials = CreateAdminBootstrapCredentials();
+        var configuration = CreateAdminBootstrapConfiguration(credentials);
+
+        await factory.Services.BootstrapDevelopmentAdminAsync(configuration);
+        await factory.Services.BootstrapDevelopmentAdminAsync(configuration);
+
+        using var scope = factory.Services.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var user = await userManager.Users.SingleAsync(user =>
+            user.UserName == credentials.Username && user.Email == credentials.Email);
+        var roles = await userManager.GetRolesAsync(user);
+
+        Assert.Single(await userManager.Users.ToListAsync());
+        Assert.Single(roles);
+        Assert.Contains(IdentityRoles.Admin, roles);
+    }
+
+    [Fact]
+    public async Task BootstrapDevelopmentAdminAsync_WhenExistingMatchingUserIsNotAdmin_AddsAdminRole()
+    {
+        var credentials = CreateAdminBootstrapCredentials();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = credentials.Username,
+                Email = credentials.Email
+            };
+            var createResult = await userManager.CreateAsync(user, credentials.Password);
+
+            Assert.True(createResult.Succeeded);
+            Assert.False(await userManager.IsInRoleAsync(user, IdentityRoles.Admin));
+        }
+
+        await factory.Services.BootstrapDevelopmentAdminAsync(CreateAdminBootstrapConfiguration(credentials));
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = await userManager.Users.SingleAsync();
+
+            Assert.True(await userManager.IsInRoleAsync(user, IdentityRoles.Admin));
+        }
+    }
+
+    [Fact]
+    public async Task BootstrapDevelopmentAdminAsync_WhenUsernameAndEmailMatchDifferentUsers_DoesNotElevateEitherUser()
+    {
+        var credentials = CreateAdminBootstrapCredentials();
+        var usernameMatchedEmail = CreateEmail();
+        var emailMatchedUsername = CreateUsername();
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+
+            var userByName = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = credentials.Username,
+                Email = usernameMatchedEmail
+            };
+            var userByEmail = new ApplicationUser
+            {
+                Id = Guid.NewGuid(),
+                UserName = emailMatchedUsername,
+                Email = credentials.Email
+            };
+
+            Assert.True((await userManager.CreateAsync(userByName, credentials.Password)).Succeeded);
+            Assert.True((await userManager.CreateAsync(userByEmail, credentials.Password)).Succeeded);
+        }
+
+        await factory.Services.BootstrapDevelopmentAdminAsync(CreateAdminBootstrapConfiguration(credentials));
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+            var users = await userManager.Users.ToListAsync();
+
+            Assert.Equal(2, users.Count);
+            foreach (var user in users)
+            {
+                Assert.False(await userManager.IsInRoleAsync(user, IdentityRoles.Admin));
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Login_WithBootstrappedAdminCredentials_ReturnsAdminRoleClaim()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+        var credentials = CreateAdminBootstrapCredentials();
+
+        await factory.Services.BootstrapDevelopmentAdminAsync(CreateAdminBootstrapConfiguration(credentials));
+
+        var authResponse = await LoginAsync(client, credentials.Username, credentials.Password);
+        var token = new JwtSecurityTokenHandler().ReadJwtToken(authResponse.AccessToken);
+
+        AssertClaimValue(token, ClaimTypes.Role, IdentityRoles.Admin);
     }
 
     [Fact]
@@ -302,6 +459,28 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
             "ValidPassword123!");
     }
 
+    private static AdminBootstrapCredentials CreateAdminBootstrapCredentials()
+    {
+        var uniqueValue = Guid.NewGuid().ToString("N");
+
+        return new AdminBootstrapCredentials(
+            $"admin-{uniqueValue}",
+            $"admin-{uniqueValue}@example.test",
+            "ValidAdminPassword123!");
+    }
+
+    private static IConfiguration CreateAdminBootstrapConfiguration(AdminBootstrapCredentials credentials)
+    {
+        return new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                [$"{AdminBootstrapOptions.SectionName}:Username"] = credentials.Username,
+                [$"{AdminBootstrapOptions.SectionName}:Email"] = credentials.Email,
+                [$"{AdminBootstrapOptions.SectionName}:Password"] = credentials.Password
+            })
+            .Build();
+    }
+
     private static string CreateUsername()
     {
         return $"user-{Guid.NewGuid():N}";
@@ -327,4 +506,6 @@ public sealed class AuthControllerTests(LibrarySystemApiFactory factory) : IAsyn
     private sealed record LoginRequest(string Username, string Password);
 
     private sealed record AuthResponse(string AccessToken, int ExpiresIn, string TokenType);
+
+    private sealed record AdminBootstrapCredentials(string Username, string Email, string Password);
 }
