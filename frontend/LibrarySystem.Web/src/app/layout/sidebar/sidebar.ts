@@ -21,7 +21,8 @@ export class SidebarComponent {
   private readonly allItems: SidebarItem[] = [
     { label: 'Anasayfa', icon: 'pi pi-home', route: '/dashboard', requiresAuthentication: true },
     { label: 'Katalog', icon: 'pi pi-book', route: '/books' },
-    { label: 'Ödünç Aldıklarım', icon: 'pi pi-bookmark', route: '/my-books', requiresAuthentication: true }
+    { label: 'Ödünç Aldıklarım', icon: 'pi pi-bookmark', route: '/my-books', requiresAuthentication: true },
+    { label: 'Ödünç Geçmişim', icon: 'pi pi-history', route: '/borrow-history', requiresAuthentication: true }
   ];
 
   protected readonly items = computed(() =>

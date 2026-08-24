@@ -125,6 +125,24 @@
   font-size: 0.72rem;
 }
 
+.loan-row__due-date--overdue {
+  color: #b42318 !important;
+  font-weight: 700;
+}
+
+.loan-row__status {
+  margin-top: 0.35rem;
+}
+
+.loan-row__status-cell {
+  min-width: 0;
+}
+
+.loan-row__status-cell p-tag {
+  display: inline-block;
+  margin-top: 0.25rem;
+}
+
 .loan-row--wide {
   padding: 0.68rem 0;
 }
@@ -196,6 +214,14 @@
 
 .summary-card--teal i {
   color: var(--app-accent);
+}
+
+.summary-card--danger {
+  background: rgba(180, 35, 24, 0.12);
+}
+
+.summary-card--danger i {
+  color: #b42318;
 }
 
 .dashboard__state,

@@ -96,6 +96,24 @@ h1 {
   font-size: 0.74rem;
 }
 
+.my-book-card__due-date--overdue {
+  color: #b42318;
+  font-weight: 700;
+}
+
+.my-book-card__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.my-book-card__status span {
+  color: var(--app-muted-text);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .my-book-card__return-action {
   display: inline-block;
   width: min(100%, 9rem);
@@ -133,6 +151,11 @@ h1 {
 }
 
 @media (max-width: 767px) {
+  .my-book-card__status {
+    width: 100%;
+    justify-content: space-between;
+  }
+
   .my-book-card__return-action {
     width: 100%;
   }

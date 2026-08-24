@@ -23,4 +23,8 @@ export class BorrowingApiService {
   getMyBooks(): Observable<BorrowedBook[]> {
     return this.http.get<BorrowedBook[]>(`${this.apiBaseUrl}/api/borrow/my-books`);
   }
+
+  getHistory(): Observable<BorrowedBook[]> {
+    return this.http.get<BorrowedBook[]>(`${this.apiBaseUrl}/api/borrow/history`);
+  }
 }

@@ -6,7 +6,9 @@ import { CardModule } from 'primeng/card';
 import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { TagModule } from 'primeng/tag';
 
+import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrowing/borrow-status-display';
 import { BorrowedBook } from '../borrowing/models/borrowed-book.model';
 import { BorrowingApiService } from '../borrowing/services/borrowing-api.service';
 import { Book } from '../books/models/book.model';
@@ -17,12 +19,12 @@ interface SummaryItem {
   label: string;
   value: string;
   icon: string;
-  tone: 'gold' | 'teal';
+  tone: 'gold' | 'teal' | 'danger';
 }
 
 @Component({
   selector: 'app-dashboard',
-  imports: [ButtonModule, CardModule, InputTextModule, MessageModule, ProgressSpinnerModule, RouterLink],
+  imports: [ButtonModule, CardModule, InputTextModule, MessageModule, ProgressSpinnerModule, RouterLink, TagModule],
   templateUrl: './dashboard.html',
   styleUrl: './dashboard.scss'
 })
@@ -38,6 +40,11 @@ export class DashboardComponent implements OnInit {
     hour: '2-digit',
     minute: '2-digit'
   });
+  private readonly dueDateFormatter = new Intl.DateTimeFormat('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  });
 
   protected readonly books = signal<Book[]>([]);
   protected readonly totalBookCount = signal(0);
@@ -48,6 +55,9 @@ export class DashboardComponent implements OnInit {
 
   protected readonly catalogBooks = computed(() => this.books().slice(0, 4));
   protected readonly recentBorrowedBooks = computed(() => this.borrowedBooks().slice(0, 3));
+  protected readonly overdueBorrowCount = computed(() =>
+    this.borrowedBooks().filter((borrowedBook) => borrowedBook.status === 'Overdue').length
+  );
 
   protected readonly summaryItems = computed<SummaryItem[]>(() => [
     { label: 'Toplam Kitap', value: this.totalBookCount().toString(), icon: 'pi pi-book', tone: 'gold' },
@@ -56,6 +66,12 @@ export class DashboardComponent implements OnInit {
       value: this.borrowedBooks().length.toString(),
       icon: 'pi pi-bookmark',
       tone: 'teal'
+    },
+    {
+      label: 'Gecikmiş Kitaplarım',
+      value: this.overdueBorrowCount().toString(),
+      icon: 'pi pi-exclamation-triangle',
+      tone: 'danger'
     }
   ]);
 
@@ -85,6 +101,22 @@ export class DashboardComponent implements OnInit {
 
   protected getBorrowedAtLabel(item: BorrowedBook): string {
     return this.dateFormatter.format(new Date(item.borrowedAt));
+  }
+
+  protected getDueDateLabel(item: BorrowedBook): string {
+    return this.dueDateFormatter.format(new Date(item.dueDate));
+  }
+
+  protected getStatusLabel(item: BorrowedBook): string {
+    return getBorrowStatusDisplay(item.status).label;
+  }
+
+  protected getStatusSeverity(item: BorrowedBook): BorrowStatusSeverity {
+    return getBorrowStatusDisplay(item.status).severity;
+  }
+
+  protected isOverdue(item: BorrowedBook): boolean {
+    return item.status === 'Overdue';
   }
 
   private loadDashboardData(): void {

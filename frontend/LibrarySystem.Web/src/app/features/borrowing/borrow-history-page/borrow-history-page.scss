@@ -1,0 +1,46 @@
+.borrow-history-page {
+  color: var(--app-text);
+}
+
+.borrow-history-page__header {
+  margin-bottom: 0.95rem;
+}
+
+.borrow-history-page__state {
+  min-height: 16rem;
+}
+
+.borrow-history-page__state span,
+.borrow-history-page__state strong {
+  font-size: 0.92rem;
+}
+
+.borrow-history-page__message {
+  display: block;
+}
+
+.borrow-history-table {
+  overflow: hidden;
+}
+
+.borrow-history-table__table {
+  font-size: 0.88rem;
+}
+
+.borrow-history-table__book-name {
+  display: block;
+  max-width: 18rem;
+  color: var(--app-primary-dark);
+  line-height: 1.2;
+}
+
+.borrow-history-table__due-date--overdue {
+  color: #b42318;
+  font-weight: 700;
+}
+
+@media (max-width: 767px) {
+  .borrow-history-page__header {
+    margin-bottom: 0.8rem;
+  }
+}

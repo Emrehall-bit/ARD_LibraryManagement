@@ -75,6 +75,14 @@
                       <strong>{{ getBorrowedBookName(loan) }}</strong>
                       <span>{{ getBorrowedAuthor(loan) }}</span>
                       <small>Alış: {{ getBorrowedAtLabel(loan) }}</small>
+                      <small [class.loan-row__due-date--overdue]="isOverdue(loan)">
+                        Son Teslim: {{ getDueDateLabel(loan) }}
+                      </small>
+                      <p-tag
+                        styleClass="loan-row__status"
+                        [value]="getStatusLabel(loan)"
+                        [severity]="getStatusSeverity(loan)"
+                      />
                     </div>
                   </article>
                 }
@@ -102,16 +110,26 @@
               <div class="loan-list loan-list--wide">
                 @for (book of recentBorrowedBooks(); track book.id) {
                   <article class="loan-row loan-row--wide grid align-items-center">
-                    <div class="col-12 md:col-8 flex align-items-center gap-3">
+                    <div class="col-12 md:col-5 flex align-items-center gap-3">
                       <div class="mini-cover {{ getBorrowedCoverClass(book) }}"></div>
                       <div class="loan-row__body">
                         <strong>{{ getBorrowedBookName(book) }}</strong>
                         <span>{{ getBorrowedAuthor(book) }}</span>
                       </div>
                     </div>
-                    <div class="col-12 md:col-4">
+                    <div class="col-12 sm:col-6 md:col-3">
                       <small>Ödünç alma tarihi</small>
                       <span>{{ getBorrowedAtLabel(book) }}</span>
+                    </div>
+                    <div class="col-12 sm:col-6 md:col-2">
+                      <small>Son teslim tarihi</small>
+                      <span [class.loan-row__due-date--overdue]="isOverdue(book)">
+                        {{ getDueDateLabel(book) }}
+                      </span>
+                    </div>
+                    <div class="col-12 md:col-2 loan-row__status-cell">
+                      <small>Durum</small>
+                      <p-tag [value]="getStatusLabel(book)" [severity]="getStatusSeverity(book)" />
                     </div>
                   </article>
                 }
@@ -149,7 +167,7 @@
             <ng-template #content>
               <div class="summary-grid grid">
                 @for (item of summaryItems(); track item.label) {
-                  <div class="col-12 md:col-6">
+                  <div class="col-12 md:col-4">
                     <article class="summary-card summary-card--{{ item.tone }}">
                       <i [class]="item.icon"></i>
                       <small>{{ item.label }}</small>

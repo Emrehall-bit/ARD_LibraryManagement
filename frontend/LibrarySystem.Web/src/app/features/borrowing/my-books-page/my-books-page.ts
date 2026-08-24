@@ -9,10 +9,9 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
 
+import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrow-status-display';
 import { BorrowedBook } from '../models/borrowed-book.model';
 import { BorrowingApiService } from '../services/borrowing-api.service';
-
-type LoanStatusSeverity = 'success' | 'secondary';
 
 @Component({
   selector: 'app-my-books-page',
@@ -38,6 +37,11 @@ export class MyBooksPageComponent implements OnInit {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit'
+  });
+  private readonly dueDateFormatter = new Intl.DateTimeFormat('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
   });
 
   protected readonly borrowedBooks = signal<BorrowedBook[]>([]);
@@ -101,12 +105,20 @@ export class MyBooksPageComponent implements OnInit {
     return this.dateFormatter.format(new Date(item.borrowedAt));
   }
 
-  protected getStatusLabel(item: BorrowedBook): string {
-    return item.returnedAt ? 'İade edildi' : 'Aktif';
+  protected getDueDateLabel(item: BorrowedBook): string {
+    return this.dueDateFormatter.format(new Date(item.dueDate));
   }
 
-  protected getStatusSeverity(item: BorrowedBook): LoanStatusSeverity {
-    return item.returnedAt ? 'secondary' : 'success';
+  protected getStatusLabel(item: BorrowedBook): string {
+    return getBorrowStatusDisplay(item.status).label;
+  }
+
+  protected getStatusSeverity(item: BorrowedBook): BorrowStatusSeverity {
+    return getBorrowStatusDisplay(item.status).severity;
+  }
+
+  protected isOverdue(item: BorrowedBook): boolean {
+    return item.status === 'Overdue';
   }
 
   private loadMyBooks(): void {

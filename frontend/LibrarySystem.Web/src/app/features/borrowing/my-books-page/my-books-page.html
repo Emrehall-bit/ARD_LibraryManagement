@@ -27,7 +27,7 @@
           <p-card styleClass="my-book-card">
             <ng-template #content>
               <article class="my-book-card__content grid align-items-center">
-                <div class="col-12 md:col-7 flex align-items-center gap-3">
+                <div class="col-12 lg:col-6 flex align-items-center gap-3">
                   <div class="book-cover {{ getCoverClass(item) }}">
                     <span>{{ getBookName(item) }}</span>
                   </div>
@@ -35,15 +35,21 @@
                   <div class="my-book-card__body">
                     <h2>{{ getBookName(item) }}</h2>
                     <p>{{ getAuthor(item) }}</p>
-                    <small>Ödünç alma tarihi: {{ getBorrowedAtLabel(item) }}</small>
+                    <small>Ödünç Alma Tarihi: {{ getBorrowedAtLabel(item) }}</small>
+                    <small [class.my-book-card__due-date--overdue]="isOverdue(item)">
+                      Son Teslim Tarihi: {{ getDueDateLabel(item) }}
+                    </small>
                   </div>
                 </div>
 
-                <div class="col-6 md:col-2">
-                  <p-tag [value]="getStatusLabel(item)" [severity]="getStatusSeverity(item)" />
+                <div class="col-12 sm:col-6 lg:col-3">
+                  <div class="my-book-card__status">
+                    <span>Durum</span>
+                    <p-tag [value]="getStatusLabel(item)" [severity]="getStatusSeverity(item)" />
+                  </div>
                 </div>
 
-                <div class="col-6 md:col-3 text-right">
+                <div class="col-12 sm:col-6 lg:col-3 text-right">
                   <p-button
                     class="my-book-card__return-action"
                     label="İade Et"

@@ -40,6 +40,14 @@ export const routes: Routes = [
         canActivate: [authGuard],
         loadComponent: () =>
           import('./features/borrowing/my-books-page/my-books-page').then((component) => component.MyBooksPageComponent)
+      },
+      {
+        path: 'borrow-history',
+        canActivate: [authGuard],
+        loadComponent: () =>
+          import('./features/borrowing/borrow-history-page/borrow-history-page').then(
+            (component) => component.BorrowHistoryPageComponent
+          )
       }
     ]
   },
