@@ -143,6 +143,35 @@
         <div class="right-stack flex flex-column gap-3">
           <p-card styleClass="dashboard-card dashboard-card--compact app-card-surface">
             <ng-template #title>
+              <div class="dashboard-card__title-row w-full flex align-items-center justify-content-between gap-2">
+                <span class="dashboard-card__title app-card-title">Yaklaşan Teslimler</span>
+                <p-button label="Git" icon="pi pi-arrow-right" size="small" [text]="true" routerLink="/my-books" />
+              </div>
+            </ng-template>
+            <ng-template #content>
+              @if (upcomingBorrowedBooks().length === 0) {
+                <div class="upcoming-empty">
+                  Yaklaşan tesliminiz bulunmuyor.
+                </div>
+              } @else {
+                <div class="loan-list">
+                  @for (upcoming of upcomingBorrowedBooks(); track upcoming.item.id) {
+                    <article class="loan-row upcoming-row flex align-items-center justify-content-between gap-2" routerLink="/my-books">
+                      <div class="loan-row__body">
+                        <strong>{{ getBorrowedBookName(upcoming.item) }}</strong>
+                        <span>{{ getBorrowedAuthor(upcoming.item) }}</span>
+                        <small>Son Teslim: {{ getDueDateLabel(upcoming.item) }}</small>
+                      </div>
+                      <p-tag [value]="upcoming.dueDisplay.label" [severity]="upcoming.dueDisplay.severity" />
+                    </article>
+                  }
+                </div>
+              }
+            </ng-template>
+          </p-card>
+
+          <p-card styleClass="dashboard-card dashboard-card--compact app-card-surface">
+            <ng-template #title>
               <span class="dashboard-card__title app-card-title">Hızlı İşlemler</span>
             </ng-template>
             <ng-template #content>
@@ -167,7 +196,7 @@
             <ng-template #content>
               <div class="summary-grid grid">
                 @for (item of summaryItems(); track item.label) {
-                  <div class="col-12 md:col-4">
+                  <div class="col-12 sm:col-6">
                     <article class="summary-card summary-card--{{ item.tone }}">
                       <i [class]="item.icon"></i>
                       <small>{{ item.label }}</small>

@@ -147,6 +147,22 @@
   padding: 0.68rem 0;
 }
 
+.upcoming-row {
+  cursor: pointer;
+}
+
+.upcoming-row:hover strong {
+  color: var(--app-accent);
+}
+
+.upcoming-empty {
+  color: var(--app-muted-text);
+}
+
+.upcoming-empty {
+  font-size: 0.86rem;
+}
+
 .right-stack {
   height: 100%;
 }
@@ -214,6 +230,14 @@
 
 .summary-card--teal i {
   color: var(--app-accent);
+}
+
+.summary-card--warning {
+  background: rgba(199, 154, 53, 0.16);
+}
+
+.summary-card--warning i {
+  color: #9a6d16;
 }
 
 .summary-card--danger {
