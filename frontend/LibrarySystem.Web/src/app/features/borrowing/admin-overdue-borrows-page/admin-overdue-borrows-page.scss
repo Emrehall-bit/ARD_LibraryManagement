@@ -1,0 +1,56 @@
+.admin-overdue-page {
+  color: var(--app-text);
+}
+
+.admin-overdue-page__header {
+  margin-bottom: 0.95rem;
+}
+
+.admin-overdue-page__state {
+  min-height: 16rem;
+}
+
+.admin-overdue-page__state span,
+.admin-overdue-page__state strong {
+  font-size: 0.92rem;
+}
+
+.admin-overdue-page__message {
+  display: block;
+}
+
+.admin-overdue-table {
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.admin-overdue-table__table {
+  font-size: 0.88rem;
+}
+
+.admin-overdue-table__username,
+.admin-overdue-table__book-name {
+  display: block;
+  line-height: 1.2;
+}
+
+.admin-overdue-table__username {
+  max-width: 12rem;
+  color: var(--app-text);
+}
+
+.admin-overdue-table__book-name {
+  max-width: 18rem;
+  color: var(--app-primary-dark);
+}
+
+.admin-overdue-table__due-date {
+  color: #b42318;
+  font-weight: 700;
+}
+
+@media (max-width: 767px) {
+  .admin-overdue-page__header {
+    margin-bottom: 0.8rem;
+  }
+}

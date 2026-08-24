@@ -1,8 +1,9 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
+import { PagedAdminOverdueBorrows } from '../models/paged-admin-overdue-borrows.model';
 import { BorrowedBook } from '../models/borrowed-book.model';
 
 @Injectable({
@@ -30,5 +31,13 @@ export class BorrowingApiService {
 
   getHistory(): Observable<BorrowedBook[]> {
     return this.http.get<BorrowedBook[]>(`${this.apiBaseUrl}/api/borrow/history`);
+  }
+
+  getOverdueBorrows(page = 1, pageSize = 20): Observable<PagedAdminOverdueBorrows> {
+    const params = new HttpParams()
+      .set('page', page)
+      .set('pageSize', pageSize);
+
+    return this.http.get<PagedAdminOverdueBorrows>(`${this.apiBaseUrl}/api/borrow/overdue`, { params });
   }
 }

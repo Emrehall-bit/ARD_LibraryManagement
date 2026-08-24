@@ -1,0 +1,75 @@
+<section class="admin-overdue-page">
+  <div class="admin-overdue-page__header">
+    <h1 class="app-page-title">Gecikmiş Ödünçler</h1>
+    <p class="app-page-subtitle">Sistemdeki aktif gecikmiş ödünç kayıtlarını görüntüleyin.</p>
+  </div>
+
+  @if (isLoading()) {
+    <div class="admin-overdue-page__state app-page-state flex flex-column align-items-center justify-content-center">
+      <p-progress-spinner ariaLabel="Gecikmiş ödünç kayıtları yükleniyor" />
+      <span>Gecikmiş ödünç kayıtları yükleniyor...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <p-message severity="error" size="small" class="admin-overdue-page__message">
+      {{ errorMessage() }}
+    </p-message>
+  } @else if (items().length === 0) {
+    <div class="admin-overdue-page__state app-page-state">
+      <i class="pi pi-check-circle"></i>
+      <strong>Aktif gecikmiş ödünç kaydı bulunmuyor.</strong>
+    </div>
+  } @else {
+    <div class="admin-overdue-table app-card-surface">
+      <p-table
+        [value]="items()"
+        [scrollable]="true"
+        styleClass="admin-overdue-table__table"
+        [tableStyle]="{ 'min-width': '70rem' }"
+      >
+        <ng-template pTemplate="header">
+          <tr>
+            <th>Kullanıcı</th>
+            <th>Kitap</th>
+            <th>Yazar</th>
+            <th>Ödünç Tarihi</th>
+            <th>Son Teslim Tarihi</th>
+            <th>Gecikme</th>
+            <th>Uzatma</th>
+            <th>Durum</th>
+          </tr>
+        </ng-template>
+
+        <ng-template pTemplate="body" let-item>
+          <tr>
+            <td>
+              <strong class="admin-overdue-table__username">{{ item.username }}</strong>
+            </td>
+            <td>
+              <strong class="admin-overdue-table__book-name">{{ getBookName(item) }}</strong>
+            </td>
+            <td>{{ getAuthor(item) }}</td>
+            <td>{{ getBorrowedAtLabel(item) }}</td>
+            <td class="admin-overdue-table__due-date">{{ getDueDateLabel(item) }}</td>
+            <td>
+              <p-tag [value]="getOverdueDaysLabel(item)" [severity]="getOverdueSeverity(item)" />
+            </td>
+            <td>{{ getRenewalCountLabel(item) }}</td>
+            <td>
+              <p-tag [value]="getStatusLabel(item)" [severity]="getStatusSeverity(item)" />
+            </td>
+          </tr>
+        </ng-template>
+      </p-table>
+    </div>
+
+    <p-paginator
+      [first]="(page() - 1) * pageSize()"
+      [rows]="pageSize()"
+      [totalRecords]="totalCount()"
+      [rowsPerPageOptions]="pageSizeOptions"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="{first} - {last} / {totalRecords}"
+      (onPageChange)="handlePageChange($event)"
+    />
+  }
+</section>

@@ -1,5 +1,6 @@
 import { Routes } from '@angular/router';
 
+import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
 import { AppLayoutComponent } from './layout/app-layout/app-layout';
 
@@ -47,6 +48,14 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./features/borrowing/borrow-history-page/borrow-history-page').then(
             (component) => component.BorrowHistoryPageComponent
+          )
+      },
+      {
+        path: 'admin/overdue-borrows',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/borrowing/admin-overdue-borrows-page/admin-overdue-borrows-page').then(
+            (component) => component.AdminOverdueBorrowsPageComponent
           )
       }
     ]
