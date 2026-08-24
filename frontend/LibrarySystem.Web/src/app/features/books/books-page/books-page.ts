@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, inject, OnInit, signal } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -11,6 +12,7 @@ import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
 import { PaginatorModule } from 'primeng/paginator';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
+import { SelectModule } from 'primeng/select';
 import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
@@ -20,12 +22,20 @@ import { BorrowingApiService } from '../../borrowing/services/borrowing-api.serv
 import { Book } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
 import { UpdateBookRequest } from '../models/update-book-request.model';
-import { BooksApiService } from '../services/books-api.service';
+import { BookSortBy, BookSortDirection, BooksApiService } from '../services/books-api.service';
 
 type StockSeverity = 'success' | 'danger';
 type CreateBookControlName = 'name' | 'author' | 'stock';
 type EditBookControlName = 'name' | 'author' | 'stock';
 type BooksPageChangeEvent = { first?: number; rows?: number; page?: number };
+type BookSortOptionValue = `${BookSortBy}:${BookSortDirection}`;
+
+interface BookSortOption {
+  label: string;
+  value: BookSortOptionValue;
+  sortBy: BookSortBy;
+  sortDirection: BookSortDirection;
+}
 
 @Component({
   selector: 'app-books-page',
@@ -34,12 +44,14 @@ type BooksPageChangeEvent = { first?: number; rows?: number; page?: number };
     CardModule,
     ConfirmDialogModule,
     DialogModule,
+    FormsModule,
     InputNumberModule,
     InputTextModule,
     MessageModule,
     PaginatorModule,
     ProgressSpinnerModule,
     ReactiveFormsModule,
+    SelectModule,
     TagModule,
     ToastModule
   ],
@@ -54,6 +66,7 @@ export class BooksPageComponent implements OnInit {
   private readonly confirmationService = inject(ConfirmationService);
   private readonly formBuilder = inject(FormBuilder);
   private readonly messageService = inject(MessageService);
+  private readonly router = inject(Router);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
 
   protected readonly books = signal<Book[]>([]);
@@ -63,6 +76,7 @@ export class BooksPageComponent implements OnInit {
   protected readonly activeSearchTerm = signal('');
   protected readonly page = signal(1);
   protected readonly pageSize = signal(20);
+  protected readonly selectedSort = signal<BookSortOptionValue>('name:asc');
   protected readonly totalCount = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly borrowingBookId = signal<string | null>(null);
@@ -75,7 +89,16 @@ export class BooksPageComponent implements OnInit {
   protected readonly editErrorMessage = signal<string | null>(null);
   protected readonly deletingBookId = signal<string | null>(null);
   protected readonly isAdmin = this.authState.isAdmin;
+  protected readonly isAuthenticated = this.authState.isAuthenticated;
   protected readonly pageSizeOptions = [20, 40, 60, 100];
+  protected readonly sortOptions: BookSortOption[] = [
+    { label: 'Kitap Adı (A-Z)', value: 'name:asc', sortBy: 'name', sortDirection: 'asc' },
+    { label: 'Kitap Adı (Z-A)', value: 'name:desc', sortBy: 'name', sortDirection: 'desc' },
+    { label: 'Yazar (A-Z)', value: 'author:asc', sortBy: 'author', sortDirection: 'asc' },
+    { label: 'Yazar (Z-A)', value: 'author:desc', sortBy: 'author', sortDirection: 'desc' },
+    { label: 'Stok (Azdan Çoğa)', value: 'stock:asc', sortBy: 'stock', sortDirection: 'asc' },
+    { label: 'Stok (Çoktan Aza)', value: 'stock:desc', sortBy: 'stock', sortDirection: 'desc' }
+  ];
 
   protected readonly createBookForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -99,6 +122,12 @@ export class BooksPageComponent implements OnInit {
 
   protected searchBooks(): void {
     this.activeSearchTerm.set(this.searchTerm().trim());
+    this.page.set(1);
+    this.loadBooks();
+  }
+
+  protected updateSort(value: BookSortOptionValue): void {
+    this.selectedSort.set(value);
     this.page.set(1);
     this.loadBooks();
   }
@@ -177,6 +206,11 @@ export class BooksPageComponent implements OnInit {
 
   protected borrowBook(book: Book): void {
     if (book.stock <= 0 || this.borrowingBookId()) {
+      return;
+    }
+
+    if (!this.isAuthenticated()) {
+      this.router.navigate(['/login']);
       return;
     }
 
@@ -381,7 +415,12 @@ export class BooksPageComponent implements OnInit {
     this.errorMessage.set(null);
 
     this.booksApi
-      .getAll(this.page(), this.pageSize(), this.activeSearchTerm())
+      .getAll({
+        page: this.page(),
+        pageSize: this.pageSize(),
+        search: this.activeSearchTerm(),
+        ...this.getSelectedSort()
+      })
       .pipe(finalize(() => this.isLoading.set(false)))
       .subscribe({
         next: (response) => {
@@ -399,6 +438,10 @@ export class BooksPageComponent implements OnInit {
 
   private loadCurrentPage(): void {
     this.loadBooks();
+  }
+
+  private getSelectedSort(): Pick<BookSortOption, 'sortBy' | 'sortDirection'> {
+    return this.sortOptions.find((option) => option.value === this.selectedSort()) ?? this.sortOptions[0];
   }
 
   private getBorrowErrorMessage(error: unknown): string {

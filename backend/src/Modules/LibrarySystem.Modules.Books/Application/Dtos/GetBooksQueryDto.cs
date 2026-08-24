@@ -7,4 +7,8 @@ public sealed class GetBooksQueryDto
     public int PageSize { get; init; } = 20;
 
     public string? Search { get; init; }
+
+    public string SortBy { get; init; } = "name";
+
+    public string SortDirection { get; init; } = "asc";
 }

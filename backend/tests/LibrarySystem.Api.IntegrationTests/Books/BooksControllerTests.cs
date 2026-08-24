@@ -37,6 +37,23 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task GetBookById_WithoutAuthentication_ReturnsOk()
+    {
+        using var authenticatedClient = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(authenticatedClient);
+        using var anonymousClient = factory.CreateUnauthenticatedApiClient();
+
+        var response = await anonymousClient.GetAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var book = await response.Content.ReadFromJsonAsync<BookResponse>();
+
+        Assert.NotNull(book);
+        Assert.Equal(createdBook.Id, book.Id);
+    }
+
+    [Fact]
     public async Task GetBooks_WithEmptyDatabase_ReturnsOkWithEmptyArray()
     {
         using var client = factory.CreateApiClient();
@@ -184,6 +201,194 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(20, page.Items.Count);
     }
 
+    [Fact]
+    public async Task GetBooks_WithDefaultSorting_ReturnsNameAscending()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Charlie", "Author B", 2);
+        await SeedBookAsync("Alpha", "Author A", 3);
+        await SeedBookAsync("Bravo", "Author C", 1);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["Alpha", "Bravo", "Charlie"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithNameDescendingSorting_ReturnsNameDescending()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Charlie", "Author B", 2);
+        await SeedBookAsync("Alpha", "Author A", 3);
+        await SeedBookAsync("Bravo", "Author C", 1);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&sortBy=name&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["Charlie", "Bravo", "Alpha"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithAuthorAscendingSorting_ReturnsAuthorAscending()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Gamma", "Carver", 2);
+        await SeedBookAsync("Alpha", "Borges", 3);
+        await SeedBookAsync("Beta", "Adams", 1);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&sortBy=author&sortDirection=asc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["Beta", "Alpha", "Gamma"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithAuthorDescendingSorting_ReturnsAuthorDescending()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Gamma", "Carver", 2);
+        await SeedBookAsync("Alpha", "Borges", 3);
+        await SeedBookAsync("Beta", "Adams", 1);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&sortBy=author&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["Gamma", "Alpha", "Beta"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithStockAscendingSorting_ReturnsStockAscending()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Delta", "Author", 3);
+        await SeedBookAsync("Alpha", "Author", 1);
+        await SeedBookAsync("Charlie", "Author", 1);
+        await SeedBookAsync("Bravo", "Author", 2);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&sortBy=stock&sortDirection=asc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["Alpha", "Charlie", "Bravo", "Delta"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithStockDescendingSorting_ReturnsStockDescending()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Delta", "Author", 3);
+        await SeedBookAsync("Alpha", "Author", 1);
+        await SeedBookAsync("Charlie", "Author", 1);
+        await SeedBookAsync("Bravo", "Author", 2);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&sortBy=stock&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["Delta", "Bravo", "Alpha", "Charlie"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithSortingAndPagination_ReturnsRequestedSortedPage()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Alpha", "Author", 1);
+        await SeedBookAsync("Bravo", "Author", 1);
+        await SeedBookAsync("Charlie", "Author", 1);
+        await SeedBookAsync("Delta", "Author", 1);
+        await SeedBookAsync("Echo", "Author", 1);
+
+        var response = await client.GetAsync("/api/books?page=2&pageSize=2&sortBy=name&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.Page);
+        Assert.Equal(2, page.PageSize);
+        Assert.Equal(5, page.TotalCount);
+        Assert.Equal(3, page.TotalPages);
+        AssertBookNames(page, ["Charlie", "Bravo"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithSortingAndSearch_ReturnsMatchingSortedBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Zed", "George Orwell", 1);
+        await SeedBookAsync("Animal Farm", "George Orwell", 1);
+        await SeedBookAsync("Other", "No Match", 1);
+
+        var response = await client.GetAsync(
+            "/api/books?page=1&pageSize=10&search=orwell&sortBy=name&sortDirection=asc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        AssertBookNames(page, ["Animal Farm", "Zed"]);
+    }
+
+    [Theory]
+    [InlineData("/api/books?sortBy=publishedAt")]
+    [InlineData("/api/books?sortBy=%20%20%20")]
+    public async Task GetBooks_WithInvalidSortBy_ReturnsBadRequest(string url)
+    {
+        using var client = factory.CreateApiClient();
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Theory]
+    [InlineData("/api/books?sortDirection=ascending")]
+    [InlineData("/api/books?sortDirection=%20%20%20")]
+    public async Task GetBooks_WithInvalidSortDirection_ReturnsBadRequest(string url)
+    {
+        using var client = factory.CreateApiClient();
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCaseInsensitiveSortingValues_ReturnsSortedBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Low", "Author", 1);
+        await SeedBookAsync("High", "Author", 9);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&sortBy=StOcK&sortDirection=DeSc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        AssertBookNames(page, ["High", "Low"]);
+    }
+
     [Theory]
     [InlineData("/api/books?page=0")]
     [InlineData("/api/books?pageSize=0")]
@@ -205,7 +410,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         var createdBook = await CreateBookAsync(adminClient);
         using var memberClient = await CreateAuthenticatedJwtClientAsync(IdentityRoles.Member);
 
-        var getAllResponse = await memberClient.GetAsync("/api/books");
+        var getAllResponse = await memberClient.GetAsync("/api/books?sortBy=name&sortDirection=asc");
         var getByIdResponse = await memberClient.GetAsync($"/api/books/{createdBook.Id}");
         var createResponse = await memberClient.PostAsJsonAsync(
             "/api/books",
@@ -236,12 +441,14 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
 
         Assert.NotNull(createdBook);
 
+        var getAllResponse = await client.GetAsync("/api/books?sortBy=name&sortDirection=asc");
         var getResponse = await client.GetAsync($"/api/books/{createdBook.Id}");
         var updateResponse = await client.PutAsJsonAsync(
             $"/api/books/{createdBook.Id}",
             new UpdateBookRequest("Refactoring", "Martin Fowler", 5));
         var deleteResponse = await client.DeleteAsync($"/api/books/{createdBook.Id}");
 
+        Assert.Equal(HttpStatusCode.OK, getAllResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
@@ -380,6 +587,29 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task CreateBook_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+        var request = new CreateBookRequest("Clean Code", "Robert C. Martin", 3);
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteBook_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var authenticatedClient = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(authenticatedClient);
+        using var anonymousClient = factory.CreateUnauthenticatedApiClient();
+
+        var response = await anonymousClient.DeleteAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
     public async Task CreateBook_WithInvalidRequest_ReturnsBadRequestWithValidationErrors()
     {
         using var client = factory.CreateApiClient();
@@ -447,6 +677,11 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     {
         return await response.Content.ReadFromJsonAsync<PagedBooksResponse>()
             ?? throw new InvalidOperationException("Paged books response body was empty.");
+    }
+
+    private static void AssertBookNames(PagedBooksResponse page, IReadOnlyList<string> expectedNames)
+    {
+        Assert.Equal(expectedNames, page.Items.Select(book => book.Name).ToList());
     }
 
     private async Task<HttpClient> CreateAuthenticatedJwtClientAsync(string role)

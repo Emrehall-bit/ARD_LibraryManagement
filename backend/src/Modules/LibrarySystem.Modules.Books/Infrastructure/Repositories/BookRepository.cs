@@ -11,6 +11,8 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
         int page,
         int pageSize,
         string? search,
+        string sortBy,
+        string sortDirection,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.Books.AsNoTracking();
@@ -25,9 +27,7 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
-        var items = await query
-            .OrderBy(book => book.Name)
-            .ThenBy(book => book.Id)
+        var items = await ApplySorting(query, sortBy, sortDirection)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);
@@ -64,5 +64,42 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static IOrderedQueryable<Book> ApplySorting(
+        IQueryable<Book> query,
+        string sortBy,
+        string sortDirection)
+    {
+        var descending = sortDirection == "desc";
+
+        return sortBy switch
+        {
+            "author" => descending
+                ? query
+                    .OrderByDescending(book => book.Author)
+                    .ThenBy(book => book.Name)
+                    .ThenBy(book => book.Id)
+                : query
+                    .OrderBy(book => book.Author)
+                    .ThenBy(book => book.Name)
+                    .ThenBy(book => book.Id),
+            "stock" => descending
+                ? query
+                    .OrderByDescending(book => book.Stock)
+                    .ThenBy(book => book.Name)
+                    .ThenBy(book => book.Id)
+                : query
+                    .OrderBy(book => book.Stock)
+                    .ThenBy(book => book.Name)
+                    .ThenBy(book => book.Id),
+            _ => descending
+                ? query
+                    .OrderByDescending(book => book.Name)
+                    .ThenBy(book => book.Id)
+                : query
+                    .OrderBy(book => book.Name)
+                    .ThenBy(book => book.Id)
+        };
     }
 }

@@ -34,8 +34,13 @@
 
     @if (isAuthenticated()) {
       <div class="topbar__user flex align-items-center gap-2">
-        <span class="topbar__avatar flex align-items-center justify-content-center">K</span>
-        <span class="topbar__username">Kullanıcı</span>
+        <span class="topbar__avatar flex align-items-center justify-content-center">{{ avatarInitial() }}</span>
+        <span class="topbar__user-meta">
+          <span class="topbar__username">{{ username() }}</span>
+          @if (roleLabel(); as label) {
+            <p-tag styleClass="topbar__role" [value]="label" severity="secondary" />
+          }
+        </span>
         <i class="pi pi-angle-down topbar__chevron"></i>
       </div>
 

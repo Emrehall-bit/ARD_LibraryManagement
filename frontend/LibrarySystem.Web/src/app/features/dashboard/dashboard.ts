@@ -93,7 +93,7 @@ export class DashboardComponent implements OnInit {
 
     if (!this.isAuthenticated()) {
       this.booksApi
-        .getAll(1, 4)
+        .getAll({ page: 1, pageSize: 4 })
         .pipe(finalize(() => this.isLoading.set(false)))
         .subscribe({
           next: (books) => {
@@ -109,7 +109,7 @@ export class DashboardComponent implements OnInit {
     }
 
     forkJoin({
-      books: this.booksApi.getAll(1, 4),
+      books: this.booksApi.getAll({ page: 1, pageSize: 4 }),
       borrowedBooks: this.borrowingApi.getMyBooks()
     })
       .pipe(finalize(() => this.isLoading.set(false)))

@@ -9,6 +9,8 @@ public interface IBookRepository
         int page,
         int pageSize,
         string? search,
+        string sortBy,
+        string sortDirection,
         CancellationToken cancellationToken = default);
 
     Task<Book?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);

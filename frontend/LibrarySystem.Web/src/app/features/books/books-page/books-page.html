@@ -10,18 +10,28 @@
 
     <div class="col-12 lg:col-7">
       <div class="books-page__actions flex align-items-center justify-content-end gap-2">
-      <label class="books-page__search flex align-items-center">
-        <i class="pi pi-search"></i>
-        <input
-          pInputText
-          type="search"
-          placeholder="Kitap adı veya yazar ara..."
-          aria-label="Kitap adı veya yazar ara"
-          [value]="searchTerm()"
-          (input)="updateSearchTerm($any($event.target).value)"
-          (keydown.enter)="searchBooks()"
+        <label class="books-page__search flex align-items-center">
+          <i class="pi pi-search"></i>
+          <input
+            pInputText
+            type="search"
+            placeholder="Kitap adı veya yazar ara..."
+            aria-label="Kitap adı veya yazar ara"
+            [value]="searchTerm()"
+            (input)="updateSearchTerm($any($event.target).value)"
+            (keydown.enter)="searchBooks()"
+          />
+        </label>
+
+        <p-select
+          styleClass="books-page__sort-select"
+          [options]="sortOptions"
+          [ngModel]="selectedSort()"
+          optionLabel="label"
+          optionValue="value"
+          aria-label="Sıralama seç"
+          (ngModelChange)="updateSort($any($event))"
         />
-      </label>
 
         <p-button label="Ara" icon="pi pi-search" size="small" (onClick)="searchBooks()" />
 

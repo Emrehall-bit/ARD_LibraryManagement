@@ -1,6 +1,6 @@
 <nav class="sidebar flex flex-column" aria-label="Ana menü">
   <div class="sidebar__section">
-    @for (item of items; track item.route) {
+    @for (item of items(); track item.route) {
       <a
         class="sidebar__item flex align-items-center gap-2"
         [routerLink]="item.route"

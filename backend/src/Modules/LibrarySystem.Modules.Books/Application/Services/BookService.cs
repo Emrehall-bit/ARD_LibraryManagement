@@ -25,6 +25,8 @@ internal sealed class BookService(
             query.Page,
             query.PageSize,
             trimmedSearch,
+            NormalizeQueryValue(query.SortBy),
+            NormalizeQueryValue(query.SortDirection),
             cancellationToken);
         var totalPages = page.TotalCount == 0
             ? 0
@@ -80,6 +82,11 @@ internal sealed class BookService(
 
         await bookRepository.DeleteAsync(book, cancellationToken);
         await bookRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string NormalizeQueryValue(string value)
+    {
+        return value.Trim().ToLowerInvariant();
     }
 
     private async Task<Book> GetBookOrThrowAsync(Guid id, CancellationToken cancellationToken)
