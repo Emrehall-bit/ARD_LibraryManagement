@@ -9,4 +9,5 @@ export interface BorrowedBook {
   dueDate: string;
   returnedAt: string | null;
   status: BorrowStatus;
+  renewalCount: number;
 }

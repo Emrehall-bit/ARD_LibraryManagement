@@ -3,7 +3,7 @@
 <section class="my-books-page">
   <div class="my-books-page__header">
     <h1>Ödünç Aldıklarım</h1>
-    <p>Aktif ödünç aldığınız kitapları görüntüleyin ve iade edin.</p>
+    <p>Aktif ödünç aldığınız kitapları görüntüleyin, süresini uzatın ve iade edin.</p>
   </div>
 
   @if (isLoading()) {
@@ -47,19 +47,37 @@
                     <span>Durum</span>
                     <p-tag [value]="getStatusLabel(item)" [severity]="getStatusSeverity(item)" />
                   </div>
+                  <p-tag
+                    styleClass="my-book-card__renewal-hint"
+                    [value]="getRenewalHint(item)"
+                    [severity]="getRenewalHintSeverity(item)"
+                  />
                 </div>
 
-                <div class="col-12 sm:col-6 lg:col-3 text-right">
-                  <p-button
-                    class="my-book-card__return-action"
-                    label="İade Et"
-                    icon="pi pi-refresh"
-                    size="small"
-                    styleClass="w-full"
-                    [loading]="isReturning(item.bookId)"
-                    [disabled]="!!item.returnedAt || isReturning(item.bookId)"
-                    (onClick)="returnBook(item)"
-                  />
+                <div class="col-12 sm:col-6 lg:col-3">
+                  <div class="my-book-card__actions">
+                    <p-button
+                      class="my-book-card__renew-action"
+                      label="Süreyi Uzat"
+                      icon="pi pi-calendar-plus"
+                      size="small"
+                      severity="secondary"
+                      styleClass="w-full"
+                      [loading]="isRenewing(item.bookId)"
+                      [disabled]="!canRenew(item) || isRenewing(item.bookId) || isReturning(item.bookId)"
+                      (onClick)="renewBook(item)"
+                    />
+                    <p-button
+                      class="my-book-card__return-action"
+                      label="İade Et"
+                      icon="pi pi-refresh"
+                      size="small"
+                      styleClass="w-full"
+                      [loading]="isReturning(item.bookId)"
+                      [disabled]="!!item.returnedAt || isReturning(item.bookId) || isRenewing(item.bookId)"
+                      (onClick)="returnBook(item)"
+                    />
+                  </div>
                 </div>
               </article>
             </ng-template>

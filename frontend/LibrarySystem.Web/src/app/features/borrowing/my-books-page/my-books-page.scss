@@ -114,9 +114,20 @@ h1 {
   text-transform: uppercase;
 }
 
+.my-book-card__renewal-hint {
+  margin-top: 0.55rem;
+}
+
+.my-book-card__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.my-book-card__renew-action,
 .my-book-card__return-action {
   display: inline-block;
-  width: min(100%, 9rem);
+  width: min(100%, 8.75rem);
 }
 
 .my-books-page__state {
@@ -156,6 +167,15 @@ h1 {
     justify-content: space-between;
   }
 
+  .my-book-card__renewal-hint {
+    width: 100%;
+  }
+
+  .my-book-card__actions {
+    flex-direction: column;
+  }
+
+  .my-book-card__renew-action,
   .my-book-card__return-action {
     width: 100%;
   }

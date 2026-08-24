@@ -20,6 +20,10 @@ export class BorrowingApiService {
     return this.http.post<BorrowedBook>(`${this.apiBaseUrl}/api/return/${bookId}`, null);
   }
 
+  renew(bookId: string): Observable<BorrowedBook> {
+    return this.http.post<BorrowedBook>(`${this.apiBaseUrl}/api/borrow/renew/${bookId}`, null);
+  }
+
   getMyBooks(): Observable<BorrowedBook[]> {
     return this.http.get<BorrowedBook[]>(`${this.apiBaseUrl}/api/borrow/my-books`);
   }

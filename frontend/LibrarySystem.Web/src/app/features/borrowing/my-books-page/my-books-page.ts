@@ -13,6 +13,8 @@ import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrow-status-d
 import { BorrowedBook } from '../models/borrowed-book.model';
 import { BorrowingApiService } from '../services/borrowing-api.service';
 
+type RenewalHintSeverity = 'success' | 'danger' | 'secondary';
+
 @Component({
   selector: 'app-my-books-page',
   imports: [
@@ -28,6 +30,7 @@ import { BorrowingApiService } from '../services/borrowing-api.service';
   styleUrl: './my-books-page.scss'
 })
 export class MyBooksPageComponent implements OnInit {
+  private readonly maxRenewalCount = 1;
   private readonly borrowingApi = inject(BorrowingApiService);
   private readonly messageService = inject(MessageService);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
@@ -48,6 +51,7 @@ export class MyBooksPageComponent implements OnInit {
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly returningBookId = signal<string | null>(null);
+  protected readonly renewingBookId = signal<string | null>(null);
 
   ngOnInit(): void {
     this.loadMyBooks();
@@ -57,8 +61,12 @@ export class MyBooksPageComponent implements OnInit {
     return this.returningBookId() === bookId;
   }
 
+  protected isRenewing(bookId: string): boolean {
+    return this.renewingBookId() === bookId;
+  }
+
   protected returnBook(item: BorrowedBook): void {
-    if (item.returnedAt || this.returningBookId()) {
+    if (item.returnedAt || this.returningBookId() || this.isRenewing(item.bookId)) {
       return;
     }
 
@@ -81,6 +89,35 @@ export class MyBooksPageComponent implements OnInit {
             severity: 'error',
             summary: 'İşlem başarısız',
             detail: this.getReturnErrorMessage(error)
+          });
+        }
+      });
+  }
+
+  protected renewBook(item: BorrowedBook): void {
+    if (!this.canRenew(item) || this.renewingBookId() || this.isReturning(item.bookId)) {
+      return;
+    }
+
+    this.renewingBookId.set(item.bookId);
+
+    this.borrowingApi
+      .renew(item.bookId)
+      .pipe(finalize(() => this.renewingBookId.set(null)))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Başarılı',
+            detail: 'Ödünç süresi 7 gün uzatıldı.'
+          });
+          this.loadMyBooks();
+        },
+        error: (error: unknown) => {
+          this.messageService.add({
+            severity: 'error',
+            summary: 'İşlem başarısız',
+            detail: this.getRenewErrorMessage(error)
           });
         }
       });
@@ -121,6 +158,30 @@ export class MyBooksPageComponent implements OnInit {
     return item.status === 'Overdue';
   }
 
+  protected canRenew(item: BorrowedBook): boolean {
+    return item.status === 'Borrowed' && item.renewalCount < this.maxRenewalCount;
+  }
+
+  protected getRenewalHint(item: BorrowedBook): string {
+    if (item.status === 'Overdue') {
+      return 'Gecikmiş kitap uzatılamaz';
+    }
+
+    if (item.renewalCount >= this.maxRenewalCount) {
+      return 'Uzatma hakkı kullanıldı';
+    }
+
+    return '1 uzatma hakkı';
+  }
+
+  protected getRenewalHintSeverity(item: BorrowedBook): RenewalHintSeverity {
+    if (item.status === 'Overdue') {
+      return 'danger';
+    }
+
+    return item.renewalCount >= this.maxRenewalCount ? 'secondary' : 'success';
+  }
+
   private loadMyBooks(): void {
     this.isLoading.set(true);
     this.errorMessage.set(null);
@@ -154,6 +215,32 @@ export class MyBooksPageComponent implements OnInit {
     }
 
     return 'Kitap iade edilirken bir hata oluştu.';
+  }
+
+  private getRenewErrorMessage(error: unknown): string {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'Ödünç süresi uzatılırken bir hata oluştu.';
+    }
+
+    const problem = this.getProblemDetails(error);
+
+    if (error.status === 400 && problem?.detail?.includes('Overdue borrow records cannot be renewed')) {
+      return 'Gecikmiş kitapların süresi uzatılamaz.';
+    }
+
+    if (error.status === 400 && problem?.detail?.includes('already been renewed')) {
+      return 'Bu kitap için uzatma hakkınızı zaten kullandınız.';
+    }
+
+    if (error.status === 404 && problem?.title === 'Resource not found.') {
+      return 'Aktif ödünç kaydı bulunamadı.';
+    }
+
+    if (error.status === 409 && problem?.title === 'Concurrency conflict.') {
+      return 'Ödünç kaydı değişti. Lütfen tekrar deneyin.';
+    }
+
+    return 'Ödünç süresi uzatılırken bir hata oluştu.';
   }
 
   private getProblemDetails(error: HttpErrorResponse): { title?: string; detail?: string } | null {
