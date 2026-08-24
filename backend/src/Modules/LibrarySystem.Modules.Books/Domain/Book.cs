@@ -7,6 +7,11 @@ public sealed class Book
     }
 
     public Book(Guid id, string name, string author, int stock)
+        : this(id, name, author, stock, BookCategory.Other)
+    {
+    }
+
+    public Book(Guid id, string name, string author, int stock, BookCategory category)
     {
         if (id == Guid.Empty)
         {
@@ -14,7 +19,7 @@ public sealed class Book
         }
 
         Id = id;
-        Update(name, author, stock);
+        Update(name, author, stock, category);
     }
 
     public Guid Id { get; private set; }
@@ -25,7 +30,14 @@ public sealed class Book
 
     public int Stock { get; private set; }
 
+    public BookCategory Category { get; private set; } = BookCategory.Other;
+
     public void Update(string name, string author, int stock)
+    {
+        Update(name, author, stock, Category);
+    }
+
+    public void Update(string name, string author, int stock, BookCategory category)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -45,6 +57,7 @@ public sealed class Book
         Name = name.Trim();
         Author = author.Trim();
         Stock = stock;
+        Category = category;
     }
 
     public void DecreaseStock()

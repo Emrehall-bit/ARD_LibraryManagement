@@ -13,6 +13,8 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
         string? search,
         string sortBy,
         string sortDirection,
+        string stockStatus,
+        BookCategory? category,
         CancellationToken cancellationToken = default)
     {
         var query = dbContext.Books.AsNoTracking();
@@ -25,6 +27,9 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
                 EF.Functions.ILike(book.Name, searchPattern) ||
                 EF.Functions.ILike(book.Author, searchPattern));
         }
+
+        query = ApplyStockFilter(query, stockStatus);
+        query = ApplyCategoryFilter(query, category);
 
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await ApplySorting(query, sortBy, sortDirection)
@@ -64,6 +69,23 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private static IQueryable<Book> ApplyStockFilter(IQueryable<Book> query, string stockStatus)
+    {
+        return stockStatus switch
+        {
+            "instock" => query.Where(book => book.Stock > 0),
+            "outofstock" => query.Where(book => book.Stock == 0),
+            _ => query
+        };
+    }
+
+    private static IQueryable<Book> ApplyCategoryFilter(IQueryable<Book> query, BookCategory? category)
+    {
+        return category is null
+            ? query
+            : query.Where(book => book.Category == category);
     }
 
     private static IOrderedQueryable<Book> ApplySorting(

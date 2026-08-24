@@ -15,5 +15,8 @@ internal sealed class UpdateBookRequestValidator : AbstractValidator<UpdateBookR
 
         RuleFor(request => request.Stock)
             .ApplyBookStockRules();
+
+        RuleFor(request => request.Category)
+            .ApplyBookCategoryRules();
     }
 }

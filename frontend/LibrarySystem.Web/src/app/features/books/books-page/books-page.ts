@@ -19,22 +19,38 @@ import { finalize } from 'rxjs';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
-import { Book } from '../models/book.model';
+import { Book, BookCategory } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
 import { UpdateBookRequest } from '../models/update-book-request.model';
-import { BookSortBy, BookSortDirection, BooksApiService } from '../services/books-api.service';
+import { BookSortBy, BookSortDirection, BooksApiService, BookStockStatus } from '../services/books-api.service';
 
 type StockSeverity = 'success' | 'danger';
-type CreateBookControlName = 'name' | 'author' | 'stock';
-type EditBookControlName = 'name' | 'author' | 'stock';
+type CreateBookControlName = 'name' | 'author' | 'stock' | 'category';
+type EditBookControlName = 'name' | 'author' | 'stock' | 'category';
 type BooksPageChangeEvent = { first?: number; rows?: number; page?: number };
 type BookSortOptionValue = `${BookSortBy}:${BookSortDirection}`;
+type CategoryFilterValue = BookCategory | 'all';
 
 interface BookSortOption {
   label: string;
   value: BookSortOptionValue;
   sortBy: BookSortBy;
   sortDirection: BookSortDirection;
+}
+
+interface StockStatusOption {
+  label: string;
+  value: BookStockStatus;
+}
+
+interface BookCategoryOption {
+  label: string;
+  value: BookCategory;
+}
+
+interface CategoryFilterOption {
+  label: string;
+  value: CategoryFilterValue;
 }
 
 @Component({
@@ -77,6 +93,8 @@ export class BooksPageComponent implements OnInit {
   protected readonly page = signal(1);
   protected readonly pageSize = signal(20);
   protected readonly selectedSort = signal<BookSortOptionValue>('name:asc');
+  protected readonly stockStatus = signal<BookStockStatus>('all');
+  protected readonly selectedCategory = signal<CategoryFilterValue>('all');
   protected readonly totalCount = signal(0);
   protected readonly totalPages = signal(0);
   protected readonly borrowingBookId = signal<string | null>(null);
@@ -99,17 +117,47 @@ export class BooksPageComponent implements OnInit {
     { label: 'Stok (Azdan Çoğa)', value: 'stock:asc', sortBy: 'stock', sortDirection: 'asc' },
     { label: 'Stok (Çoktan Aza)', value: 'stock:desc', sortBy: 'stock', sortDirection: 'desc' }
   ];
+  protected readonly stockStatusOptions: StockStatusOption[] = [
+    { label: 'Tüm Stoklar', value: 'all' },
+    { label: 'Stokta Olanlar', value: 'inStock' },
+    { label: 'Stokta Olmayanlar', value: 'outOfStock' }
+  ];
+  protected readonly categoryOptions: BookCategoryOption[] = [
+    { label: 'Roman', value: 'Novel' },
+    { label: 'Bilim Kurgu', value: 'ScienceFiction' },
+    { label: 'Fantastik', value: 'Fantasy' },
+    { label: 'Polisiye / Gizem', value: 'Mystery' },
+    { label: 'Macera', value: 'Adventure' },
+    { label: 'Aksiyon', value: 'Action' },
+    { label: 'Korku / Gerilim', value: 'HorrorThriller' },
+    { label: 'Tarih', value: 'History' },
+    { label: 'Biyografi', value: 'Biography' },
+    { label: 'Kişisel Gelişim', value: 'PersonalDevelopment' },
+    { label: 'Psikoloji', value: 'Psychology' },
+    { label: 'Felsefe', value: 'Philosophy' },
+    { label: 'Bilim', value: 'Science' },
+    { label: 'Çocuk', value: 'Children' },
+    { label: 'Gençlik', value: 'YoungAdult' },
+    { label: 'Şiir', value: 'Poetry' },
+    { label: 'Diğer', value: 'Other' }
+  ];
+  protected readonly categoryFilterOptions: CategoryFilterOption[] = [
+    { label: 'Tüm Türler', value: 'all' },
+    ...this.categoryOptions
+  ];
 
   protected readonly createBookForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
     author: ['', [Validators.required, Validators.maxLength(200)]],
-    stock: [0, [Validators.required, Validators.min(0)]]
+    stock: [0, [Validators.required, Validators.min(0)]],
+    category: ['Other' as BookCategory, Validators.required]
   });
 
   protected readonly editBookForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
     author: ['', [Validators.required, Validators.maxLength(200)]],
-    stock: [0, [Validators.required, Validators.min(0)]]
+    stock: [0, [Validators.required, Validators.min(0)]],
+    category: ['Other' as BookCategory, Validators.required]
   });
 
   ngOnInit(): void {
@@ -128,6 +176,18 @@ export class BooksPageComponent implements OnInit {
 
   protected updateSort(value: BookSortOptionValue): void {
     this.selectedSort.set(value);
+    this.page.set(1);
+    this.loadBooks();
+  }
+
+  protected updateStockStatus(value: BookStockStatus): void {
+    this.stockStatus.set(value);
+    this.page.set(1);
+    this.loadBooks();
+  }
+
+  protected updateCategory(value: CategoryFilterValue): void {
+    this.selectedCategory.set(value);
     this.page.set(1);
     this.loadBooks();
   }
@@ -167,7 +227,8 @@ export class BooksPageComponent implements OnInit {
     this.editBookForm.reset({
       name: book.name,
       author: book.author,
-      stock: book.stock
+      stock: book.stock,
+      category: book.category
     });
     this.isEditDialogVisible.set(true);
   }
@@ -194,6 +255,26 @@ export class BooksPageComponent implements OnInit {
 
   protected getStockSeverity(stock: number): StockSeverity {
     return stock > 0 ? 'success' : 'danger';
+  }
+
+  protected getCategoryLabel(category: BookCategory): string {
+    return this.categoryOptions.find((option) => option.value === category)?.label ?? 'Diğer';
+  }
+
+  protected getEmptyStateMessage(): string {
+    if (this.activeSearchTerm()) {
+      return 'Aramanız ve filtrelerinizle eşleşen kitap bulunamadı.';
+    }
+
+    if (this.stockStatus() === 'inStock') {
+      return 'Stokta bulunan kitap yok.';
+    }
+
+    if (this.stockStatus() === 'outOfStock') {
+      return 'Stokta olmayan kitap yok.';
+    }
+
+    return 'Henüz kayıtlı kitap bulunmuyor.';
   }
 
   protected isBorrowing(bookId: string): boolean {
@@ -419,6 +500,8 @@ export class BooksPageComponent implements OnInit {
         page: this.page(),
         pageSize: this.pageSize(),
         search: this.activeSearchTerm(),
+        stockStatus: this.stockStatus(),
+        category: this.getSelectedCategory(),
         ...this.getSelectedSort()
       })
       .pipe(finalize(() => this.isLoading.set(false)))
@@ -442,6 +525,12 @@ export class BooksPageComponent implements OnInit {
 
   private getSelectedSort(): Pick<BookSortOption, 'sortBy' | 'sortDirection'> {
     return this.sortOptions.find((option) => option.value === this.selectedSort()) ?? this.sortOptions[0];
+  }
+
+  private getSelectedCategory(): BookCategory | null {
+    return this.selectedCategory() === 'all'
+      ? null
+      : this.selectedCategory() as BookCategory;
   }
 
   private getBorrowErrorMessage(error: unknown): string {
@@ -537,7 +626,8 @@ export class BooksPageComponent implements OnInit {
     this.createBookForm.reset({
       name: '',
       author: '',
-      stock: 0
+      stock: 0,
+      category: 'Other'
     });
     this.createErrorMessage.set(null);
   }
@@ -546,7 +636,8 @@ export class BooksPageComponent implements OnInit {
     this.editBookForm.reset({
       name: '',
       author: '',
-      stock: 0
+      stock: 0,
+      category: 'Other'
     });
     this.selectedBook.set(null);
     this.editErrorMessage.set(null);
@@ -556,7 +647,8 @@ export class BooksPageComponent implements OnInit {
     const messages: Record<CreateBookControlName, string> = {
       name: 'Kitap adı zorunludur.',
       author: 'Yazar zorunludur.',
-      stock: 'Stok zorunludur.'
+      stock: 'Stok zorunludur.',
+      category: 'Tür zorunludur.'
     };
 
     return messages[controlName];
@@ -566,7 +658,8 @@ export class BooksPageComponent implements OnInit {
     const messages: Record<EditBookControlName, string> = {
       name: 'Kitap adı zorunludur.',
       author: 'Yazar zorunludur.',
-      stock: 'Stok zorunludur.'
+      stock: 'Stok zorunludur.',
+      category: 'Tür zorunludur.'
     };
 
     return messages[controlName];

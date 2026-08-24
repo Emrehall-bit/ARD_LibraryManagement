@@ -389,6 +389,288 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         AssertBookNames(page, ["High", "Low"]);
     }
 
+    [Fact]
+    public async Task GetBooks_WithDefaultStockStatus_ReturnsAllBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("In Stock", "Author", 3);
+        await SeedBookAsync("Out Of Stock", "Author", 0);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        AssertBookNames(page, ["In Stock", "Out Of Stock"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithInStockFilter_ReturnsOnlyBooksWithPositiveStock()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Available One", "Author", 1);
+        await SeedBookAsync("Unavailable", "Author", 0);
+        await SeedBookAsync("Available Two", "Author", 5);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&stockStatus=inStock");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        Assert.All(page.Items, book => Assert.True(book.Stock > 0));
+        AssertBookNames(page, ["Available One", "Available Two"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithOutOfStockFilter_ReturnsOnlyBooksWithZeroStock()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Available", "Author", 2);
+        await SeedBookAsync("Gone One", "Author", 0);
+        await SeedBookAsync("Gone Two", "Author", 0);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&stockStatus=outOfStock");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        Assert.All(page.Items, book => Assert.Equal(0, book.Stock));
+        AssertBookNames(page, ["Gone One", "Gone Two"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCaseInsensitiveStockStatus_ReturnsFilteredBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Available", "Author", 2);
+        await SeedBookAsync("Gone", "Author", 0);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&stockStatus=OuToFsToCk");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Gone", book.Name);
+        Assert.Equal(0, book.Stock);
+    }
+
+    [Theory]
+    [InlineData("/api/books?stockStatus=available123")]
+    [InlineData("/api/books?stockStatus=%20%20%20")]
+    public async Task GetBooks_WithInvalidStockStatus_ReturnsBadRequest(string url)
+    {
+        using var client = factory.CreateApiClient();
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithStockFilterAndSearch_ReturnsMatchingFilteredBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Animal Farm", "George Orwell", 4);
+        await SeedBookAsync("Nineteen Eighty-Four", "George Orwell", 0);
+        await SeedBookAsync("Other", "No Match", 7);
+
+        var response = await client.GetAsync(
+            "/api/books?page=1&pageSize=10&search=orwell&stockStatus=inStock");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Animal Farm", book.Name);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithStockFilterAndSorting_ReturnsFilteredSortedBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Low", "Author", 1);
+        await SeedBookAsync("Gone", "Author", 0);
+        await SeedBookAsync("High", "Author", 9);
+
+        var response = await client.GetAsync(
+            "/api/books?page=1&pageSize=10&stockStatus=inStock&sortBy=stock&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        AssertBookNames(page, ["High", "Low"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithStockFilterAndPagination_ReturnsFilteredTotalCount()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Alpha", "Author", 1);
+        await SeedBookAsync("Bravo", "Author", 0);
+        await SeedBookAsync("Charlie", "Author", 2);
+        await SeedBookAsync("Delta", "Author", 0);
+        await SeedBookAsync("Echo", "Author", 3);
+
+        var response = await client.GetAsync(
+            "/api/books?page=2&pageSize=2&stockStatus=inStock&sortBy=name&sortDirection=asc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.Page);
+        Assert.Equal(2, page.PageSize);
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal(2, page.TotalPages);
+        AssertBookNames(page, ["Echo"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCategoryFilter_ReturnsOnlyMatchingCategory()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Dune", "Frank Herbert", 4, BookCategory.ScienceFiction);
+        await SeedBookAsync("Foundation", "Isaac Asimov", 2, BookCategory.ScienceFiction);
+        await SeedBookAsync("Hamlet", "William Shakespeare", 1, BookCategory.Poetry);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&category=ScienceFiction");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        Assert.All(page.Items, book => Assert.Equal(nameof(BookCategory.ScienceFiction), book.Category));
+        AssertBookNames(page, ["Dune", "Foundation"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCaseInsensitiveCategory_ReturnsMatchingBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Dune", "Frank Herbert", 4, BookCategory.ScienceFiction);
+        await SeedBookAsync("Hamlet", "William Shakespeare", 1, BookCategory.Poetry);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10&category=sciencefiction");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Dune", book.Name);
+        Assert.Equal(nameof(BookCategory.ScienceFiction), book.Category);
+    }
+
+    [Theory]
+    [InlineData("/api/books?category=Kitchen")]
+    public async Task GetBooks_WithInvalidCategory_ReturnsBadRequest(string url)
+    {
+        using var client = factory.CreateApiClient();
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCategoryAndSearch_ReturnsMatchingFilteredBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Dune", "Frank Herbert", 4, BookCategory.ScienceFiction);
+        await SeedBookAsync("Dune Poems", "Frank Herbert", 4, BookCategory.Poetry);
+        await SeedBookAsync("Foundation", "Isaac Asimov", 2, BookCategory.ScienceFiction);
+
+        var response = await client.GetAsync(
+            "/api/books?page=1&pageSize=10&search=dune&category=ScienceFiction");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Dune", book.Name);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCategoryAndStockFilter_ReturnsMatchingFilteredBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Available Fantasy", "Author", 3, BookCategory.Fantasy);
+        await SeedBookAsync("Unavailable Fantasy", "Author", 0, BookCategory.Fantasy);
+        await SeedBookAsync("Available Novel", "Author", 3, BookCategory.Novel);
+
+        var response = await client.GetAsync(
+            "/api/books?page=1&pageSize=10&category=Fantasy&stockStatus=inStock");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal("Available Fantasy", book.Name);
+        Assert.Equal(1, page.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCategoryAndSorting_ReturnsMatchingSortedBooks()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Low", "Author", 1, BookCategory.History);
+        await SeedBookAsync("High", "Author", 9, BookCategory.History);
+        await SeedBookAsync("Other", "Author", 20, BookCategory.Science);
+
+        var response = await client.GetAsync(
+            "/api/books?page=1&pageSize=10&category=History&sortBy=stock&sortDirection=desc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.TotalCount);
+        AssertBookNames(page, ["High", "Low"]);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCategoryAndPagination_ReturnsFilteredTotalCount()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("Alpha", "Author", 1, BookCategory.Biography);
+        await SeedBookAsync("Bravo", "Author", 1, BookCategory.Biography);
+        await SeedBookAsync("Charlie", "Author", 1, BookCategory.Biography);
+        await SeedBookAsync("Delta", "Author", 1, BookCategory.Mystery);
+
+        var response = await client.GetAsync(
+            "/api/books?page=2&pageSize=2&category=Biography&sortBy=name&sortDirection=asc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+
+        Assert.Equal(2, page.Page);
+        Assert.Equal(2, page.PageSize);
+        Assert.Equal(3, page.TotalCount);
+        Assert.Equal(2, page.TotalPages);
+        AssertBookNames(page, ["Charlie"]);
+    }
+
     [Theory]
     [InlineData("/api/books?page=0")]
     [InlineData("/api/books?pageSize=0")]
@@ -472,6 +754,25 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(request.Name, book.Name);
         Assert.Equal(request.Author, book.Author);
         Assert.Equal(request.Stock, book.Stock);
+        Assert.Equal(request.Category, book.Category);
+    }
+
+    [Fact]
+    public async Task CreateBook_WithInvalidCategory_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Clean Code", "Robert C. Martin", 3, "NotACategory");
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        using var content = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var errors = content.RootElement.GetProperty("errors");
+
+        Assert.True(errors.TryGetProperty("Category", out var categoryErrors));
+        Assert.True(categoryErrors.GetArrayLength() > 0);
     }
 
     [Fact]
@@ -491,6 +792,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(createdBook.Name, book.Name);
         Assert.Equal(createdBook.Author, book.Author);
         Assert.Equal(createdBook.Stock, book.Stock);
+        Assert.Equal(createdBook.Category, book.Category);
     }
 
     [Fact]
@@ -513,7 +815,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     {
         using var client = factory.CreateApiClient();
         var createdBook = await CreateBookAsync(client);
-        var request = new UpdateBookRequest("Refactoring", "Martin Fowler", 5);
+        var request = new UpdateBookRequest("Refactoring", "Martin Fowler", 5, nameof(BookCategory.Science));
 
         var response = await client.PutAsJsonAsync($"/api/books/{createdBook.Id}", request);
 
@@ -526,6 +828,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(request.Name, updatedBook.Name);
         Assert.Equal(request.Author, updatedBook.Author);
         Assert.Equal(request.Stock, updatedBook.Stock);
+        Assert.Equal(request.Category, updatedBook.Category);
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -536,6 +839,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(request.Name, storedBook.Name);
         Assert.Equal(request.Author, storedBook.Author);
         Assert.Equal(request.Stock, storedBook.Stock);
+        Assert.Equal(BookCategory.Science, storedBook.Category);
     }
 
     [Fact]
@@ -663,11 +967,15 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         }
     }
 
-    private async Task SeedBookAsync(string name, string author, int stock)
+    private async Task SeedBookAsync(
+        string name,
+        string author,
+        int stock,
+        BookCategory category = BookCategory.Novel)
     {
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
-        var book = new Book(Guid.NewGuid(), name, author, stock);
+        var book = new Book(Guid.NewGuid(), name, author, stock, category);
 
         await dbContext.Books.AddAsync(book);
         await dbContext.SaveChangesAsync();
@@ -758,11 +1066,19 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
             "ValidPassword123!");
     }
 
-    private sealed record CreateBookRequest(string Name, string Author, int Stock);
+    private sealed record CreateBookRequest(
+        string Name,
+        string Author,
+        int Stock,
+        string Category = nameof(BookCategory.Novel));
 
-    private sealed record UpdateBookRequest(string Name, string Author, int Stock);
+    private sealed record UpdateBookRequest(
+        string Name,
+        string Author,
+        int Stock,
+        string Category = nameof(BookCategory.Novel));
 
-    private sealed record BookResponse(Guid Id, string Name, string Author, int Stock);
+    private sealed record BookResponse(Guid Id, string Name, string Author, int Stock, string Category);
 
     private sealed record PagedBooksResponse(
         IReadOnlyList<BookResponse> Items,

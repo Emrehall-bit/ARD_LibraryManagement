@@ -81,9 +81,62 @@ function Get-DeterministicStock([string] $name, [string] $author) {
     return [int]($number % 21)
 }
 
+function Test-SubjectMatch([string[]] $subjects, [string[]] $keywords) {
+    foreach ($subject in $subjects) {
+        foreach ($keyword in $keywords) {
+            if ($subject -like "*$keyword*") {
+                return $true
+            }
+        }
+    }
+
+    return $false
+}
+
+function Get-BookCategory([object] $subjects) {
+    if ($null -eq $subjects) {
+        return 'Other'
+    }
+
+    $normalizedSubjects = @($subjects) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        ForEach-Object { (Normalize-Text ([string]$_)).ToLowerInvariant() }
+
+    if ($normalizedSubjects.Count -eq 0) {
+        return 'Other'
+    }
+
+    $categoryRules = @(
+        @{ Category = 'ScienceFiction'; Keywords = @('science fiction', 'sci-fi', 'dystopia', 'space', 'aliens', 'alien') },
+        @{ Category = 'Fantasy'; Keywords = @('fantasy', 'magic', 'epic fantasy') },
+        @{ Category = 'Mystery'; Keywords = @('mystery', 'detective', 'crime') },
+        @{ Category = 'Adventure'; Keywords = @('adventure', 'exploration') },
+        @{ Category = 'Action'; Keywords = @('action', 'war fiction') },
+        @{ Category = 'HorrorThriller'; Keywords = @('horror', 'thriller', 'suspense') },
+        @{ Category = 'History'; Keywords = @('history', 'historical', 'world history') },
+        @{ Category = 'Biography'; Keywords = @('biography', 'autobiography', 'memoir') },
+        @{ Category = 'PersonalDevelopment'; Keywords = @('self-help', 'self help', 'personal development', 'success', 'motivation') },
+        @{ Category = 'Psychology'; Keywords = @('psychology', 'human behavior', 'human behaviour') },
+        @{ Category = 'Philosophy'; Keywords = @('philosophy', 'ethics') },
+        @{ Category = 'Science'; Keywords = @('science', 'physics', 'biology', 'astronomy', 'mathematics') },
+        @{ Category = 'Children'; Keywords = @("children's literature", 'childrens literature', 'juvenile') },
+        @{ Category = 'YoungAdult'; Keywords = @('young adult', 'teen') },
+        @{ Category = 'Poetry'; Keywords = @('poetry', 'poems') },
+        @{ Category = 'Novel'; Keywords = @('fiction', 'literature', 'novels', 'novel') }
+    )
+
+    foreach ($rule in $categoryRules) {
+        if (Test-SubjectMatch $normalizedSubjects $rule.Keywords) {
+            return $rule.Category
+        }
+    }
+
+    return 'Other'
+}
+
 function New-OpenLibrarySearchUri([string] $query, [int] $page, [int] $limit) {
     $encodedQuery = [Uri]::EscapeDataString($query)
-    $encodedFields = [Uri]::EscapeDataString('title,author_name')
+    $encodedFields = [Uri]::EscapeDataString('title,author_name,subject')
 
     return "https://openlibrary.org/search.json?q=$encodedQuery&fields=$encodedFields&limit=$limit&page=$page"
 }
@@ -107,7 +160,7 @@ function Invoke-OpenLibrarySearch([string] $uri) {
     }
 }
 
-function Add-Book([string] $name, [string] $author) {
+function Add-Book([string] $name, [string] $author, [object] $subjects) {
     $normalizedName = Normalize-Text $name
     $normalizedAuthor = Normalize-Text $author
 
@@ -125,6 +178,7 @@ function Add-Book([string] $name, [string] $author) {
         name = $normalizedName
         author = $normalizedAuthor
         stock = Get-DeterministicStock $normalizedName $normalizedAuthor
+        category = Get-BookCategory $subjects
     })
 }
 
@@ -167,7 +221,7 @@ while ($books.Count -lt $TargetCount -and $activeQueries.Count -gt 0) {
                 continue
             }
 
-            Add-Book $doc.title $doc.author_name[0]
+            Add-Book $doc.title $doc.author_name[0] $doc.subject
         }
 
         $pagesByQuery[$query] = $page + 1
@@ -188,8 +242,14 @@ $orderedBooks |
 
 $uniqueAuthors = ($orderedBooks | Select-Object -ExpandProperty author -Unique).Count
 $outOfStockCount = ($orderedBooks | Where-Object { $_.stock -eq 0 }).Count
+$categoryDistribution = $orderedBooks |
+    Group-Object -Property category |
+    Sort-Object -Property Name |
+    ForEach-Object { "$($_.Name): $($_.Count)" }
 
 Write-Host "Generated $($orderedBooks.Count) books."
 Write-Host "Unique authors: $uniqueAuthors"
 Write-Host "Out-of-stock entries: $outOfStockCount"
+Write-Host "Category distribution:"
+$categoryDistribution | ForEach-Object { Write-Host "  $_" }
 Write-Host "Output: $outputPath"

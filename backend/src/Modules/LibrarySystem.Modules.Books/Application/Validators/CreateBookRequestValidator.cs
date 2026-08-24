@@ -15,5 +15,8 @@ internal sealed class CreateBookRequestValidator : AbstractValidator<CreateBookR
 
         RuleFor(request => request.Stock)
             .ApplyBookStockRules();
+
+        RuleFor(request => request.Category)
+            .ApplyBookCategoryRules();
     }
 }

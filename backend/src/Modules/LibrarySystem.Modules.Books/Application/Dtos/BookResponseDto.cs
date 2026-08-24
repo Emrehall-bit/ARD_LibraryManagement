@@ -4,4 +4,5 @@ public sealed record BookResponseDto(
     Guid Id,
     string Name,
     string Author,
-    int Stock);
+    int Stock,
+    string Category);

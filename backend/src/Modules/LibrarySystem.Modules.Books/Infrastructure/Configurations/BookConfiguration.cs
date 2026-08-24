@@ -32,5 +32,12 @@ internal sealed class BookConfiguration : IEntityTypeConfiguration<Book>
         builder.Property(book => book.Stock)
             .HasColumnName("stock")
             .IsRequired();
+
+        builder.Property(book => book.Category)
+            .HasColumnName("category")
+            .HasConversion<string>()
+            .HasMaxLength(64)
+            .HasDefaultValue(BookCategory.Other)
+            .IsRequired();
     }
 }

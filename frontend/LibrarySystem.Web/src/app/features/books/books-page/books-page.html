@@ -24,6 +24,26 @@
         </label>
 
         <p-select
+          styleClass="books-page__filter-select"
+          [options]="stockStatusOptions"
+          [ngModel]="stockStatus()"
+          optionLabel="label"
+          optionValue="value"
+          aria-label="Stok filtresi seç"
+          (ngModelChange)="updateStockStatus($any($event))"
+        />
+
+        <p-select
+          styleClass="books-page__filter-select"
+          [options]="categoryFilterOptions"
+          [ngModel]="selectedCategory()"
+          optionLabel="label"
+          optionValue="value"
+          aria-label="Tür filtresi seç"
+          (ngModelChange)="updateCategory($any($event))"
+        />
+
+        <p-select
           styleClass="books-page__sort-select"
           [options]="sortOptions"
           [ngModel]="selectedSort()"
@@ -51,15 +71,10 @@
     <p-message severity="error" size="small" class="books-page__message">
       {{ errorMessage() }}
     </p-message>
-  } @else if (books().length === 0 && !activeSearchTerm()) {
+  } @else if (books().length === 0) {
     <div class="books-page__state">
-      <i class="pi pi-book"></i>
-      <strong>Henüz kayıtlı kitap bulunmuyor.</strong>
-    </div>
-  } @else if (books().length === 0 && activeSearchTerm()) {
-    <div class="books-page__state">
-      <i class="pi pi-search"></i>
-      <strong>Aramanızla eşleşen kitap bulunamadı.</strong>
+      <i [class]="activeSearchTerm() ? 'pi pi-search' : 'pi pi-book'"></i>
+      <strong>{{ getEmptyStateMessage() }}</strong>
     </div>
   } @else {
     <div class="grid books-page__grid">
@@ -77,7 +92,10 @@
                   <p>{{ book.author }}</p>
                 </div>
 
-                <p-tag [value]="getStockLabel(book.stock)" [severity]="getStockSeverity(book.stock)" />
+                <div class="book-card__tags flex justify-content-center gap-2">
+                  <p-tag [value]="getCategoryLabel(book.category)" severity="secondary" />
+                  <p-tag [value]="getStockLabel(book.stock)" [severity]="getStockSeverity(book.stock)" />
+                </div>
                 <p-button
                   label="Ödünç Al"
                   icon="pi pi-bookmark"
@@ -181,6 +199,21 @@
     </div>
 
     <div class="book-create-form__field">
+      <label for="bookCategory">Tür</label>
+      <p-select
+        inputId="bookCategory"
+        formControlName="category"
+        [options]="categoryOptions"
+        optionLabel="label"
+        optionValue="value"
+        styleClass="w-full book-create-form__select"
+      />
+      @if (showCreateValidationError('category')) {
+        <small>{{ getCreateValidationMessage('category') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__field">
       <label for="bookStock">Stok</label>
       <p-inputnumber
         inputId="bookStock"
@@ -263,6 +296,21 @@
       />
       @if (showEditValidationError('author')) {
         <small>{{ getEditValidationMessage('author') }}</small>
+      }
+    </div>
+
+    <div class="book-create-form__field">
+      <label for="editBookCategory">Tür</label>
+      <p-select
+        inputId="editBookCategory"
+        formControlName="category"
+        [options]="categoryOptions"
+        optionLabel="label"
+        optionValue="value"
+        styleClass="w-full book-create-form__select"
+      />
+      @if (showEditValidationError('category')) {
+        <small>{{ getEditValidationMessage('category') }}</small>
       }
     </div>
 

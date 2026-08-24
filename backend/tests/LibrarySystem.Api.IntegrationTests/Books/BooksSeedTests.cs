@@ -44,9 +44,11 @@ public sealed class BooksSeedTests(LibrarySystemApiFactory factory) : IAsyncLife
             Assert.True(book.Name.Length <= 200);
             Assert.True(book.Author.Length <= 200);
             Assert.InRange(book.Stock, 0, 20);
+            Assert.True(Enum.IsDefined(book.Category));
         });
         Assert.Equal(0, duplicateNameAuthorCount);
         Assert.Contains(books, book => book.Stock == 0);
+        Assert.Contains(books, book => book.Category != BookCategory.Other);
     }
 
     [Fact]

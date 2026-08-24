@@ -11,6 +11,8 @@ public interface IBookRepository
         string? search,
         string sortBy,
         string sortDirection,
+        string stockStatus,
+        BookCategory? category,
         CancellationToken cancellationToken = default);
 
     Task<Book?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);

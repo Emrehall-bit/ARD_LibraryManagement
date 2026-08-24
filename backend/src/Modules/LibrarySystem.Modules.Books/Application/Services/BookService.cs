@@ -27,6 +27,8 @@ internal sealed class BookService(
             trimmedSearch,
             NormalizeQueryValue(query.SortBy),
             NormalizeQueryValue(query.SortDirection),
+            NormalizeQueryValue(query.StockStatus),
+            ParseOptionalCategory(query.Category),
             cancellationToken);
         var totalPages = page.TotalCount == 0
             ? 0
@@ -53,7 +55,12 @@ internal sealed class BookService(
     {
         await createBookRequestValidator.ValidateAndThrowAsync(request, cancellationToken);
 
-        var book = new Book(Guid.NewGuid(), request.Name, request.Author, request.Stock);
+        var book = new Book(
+            Guid.NewGuid(),
+            request.Name,
+            request.Author,
+            request.Stock,
+            ParseCategory(request.Category));
 
         await bookRepository.AddAsync(book, cancellationToken);
         await bookRepository.SaveChangesAsync(cancellationToken);
@@ -70,7 +77,7 @@ internal sealed class BookService(
 
         var book = await GetTrackedBookOrThrowAsync(id, cancellationToken);
 
-        book.Update(request.Name, request.Author, request.Stock);
+        book.Update(request.Name, request.Author, request.Stock, ParseCategory(request.Category));
         await bookRepository.SaveChangesAsync(cancellationToken);
 
         return MapToResponseDto(book);
@@ -87,6 +94,18 @@ internal sealed class BookService(
     private static string NormalizeQueryValue(string value)
     {
         return value.Trim().ToLowerInvariant();
+    }
+
+    private static BookCategory? ParseOptionalCategory(string? category)
+    {
+        return string.IsNullOrWhiteSpace(category)
+            ? null
+            : ParseCategory(category);
+    }
+
+    private static BookCategory ParseCategory(string category)
+    {
+        return Enum.Parse<BookCategory>(category.Trim(), ignoreCase: true);
     }
 
     private async Task<Book> GetBookOrThrowAsync(Guid id, CancellationToken cancellationToken)
@@ -109,6 +128,7 @@ internal sealed class BookService(
             book.Id,
             book.Name,
             book.Author,
-            book.Stock);
+            book.Stock,
+            book.Category.ToString());
     }
 }

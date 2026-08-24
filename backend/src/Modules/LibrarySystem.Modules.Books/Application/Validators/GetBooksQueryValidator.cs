@@ -7,6 +7,7 @@ internal sealed class GetBooksQueryValidator : AbstractValidator<GetBooksQueryDt
 {
     private static readonly string[] SupportedSortFields = ["name", "author", "stock"];
     private static readonly string[] SupportedSortDirections = ["asc", "desc"];
+    private static readonly string[] SupportedStockStatuses = ["all", "inStock", "outOfStock"];
 
     public GetBooksQueryValidator()
     {
@@ -23,6 +24,14 @@ internal sealed class GetBooksQueryValidator : AbstractValidator<GetBooksQueryDt
         RuleFor(query => query.SortDirection)
             .Must(value => IsSupportedValue(value, SupportedSortDirections))
             .WithMessage("'Sort Direction' must be one of: asc, desc.");
+
+        RuleFor(query => query.StockStatus)
+            .Must(value => IsSupportedValue(value, SupportedStockStatuses))
+            .WithMessage("'Stock Status' must be one of: all, inStock, outOfStock.");
+
+        RuleFor(query => query.Category)
+            .Must(value => value is null || BookValidationRules.IsSupportedCategory(value))
+            .WithMessage("'Category' must be a supported book category.");
     }
 
     private static bool IsSupportedValue(string? value, IReadOnlyCollection<string> supportedValues)

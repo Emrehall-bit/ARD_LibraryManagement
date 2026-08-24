@@ -11,4 +11,8 @@ public sealed class GetBooksQueryDto
     public string SortBy { get; init; } = "name";
 
     public string SortDirection { get; init; } = "asc";
+
+    public string StockStatus { get; init; } = "all";
+
+    public string? Category { get; init; }
 }

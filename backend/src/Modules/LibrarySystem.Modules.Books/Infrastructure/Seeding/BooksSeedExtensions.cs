@@ -25,7 +25,12 @@ public static class BooksSeedExtensions
 
         var seedBooks = await ReadSeedBooksAsync(cancellationToken);
         var books = seedBooks
-            .Select(seedBook => new Book(Guid.NewGuid(), seedBook.Name, seedBook.Author, seedBook.Stock))
+            .Select(seedBook => new Book(
+                Guid.NewGuid(),
+                seedBook.Name,
+                seedBook.Author,
+                seedBook.Stock,
+                Enum.Parse<BookCategory>(seedBook.Category, ignoreCase: true)))
             .ToList();
 
         await dbContext.Books.AddRangeAsync(books, cancellationToken);
@@ -52,5 +57,5 @@ public static class BooksSeedExtensions
         return seedBooks;
     }
 
-    private sealed record BookSeedEntry(string Name, string Author, int Stock);
+    private sealed record BookSeedEntry(string Name, string Author, int Stock, string Category);
 }

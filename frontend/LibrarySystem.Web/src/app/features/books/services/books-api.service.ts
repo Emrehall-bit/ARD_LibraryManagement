@@ -3,13 +3,14 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
-import { Book } from '../models/book.model';
+import { Book, BookCategory } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
 import { PagedBooksResponse } from '../models/paged-books-response.model';
 import { UpdateBookRequest } from '../models/update-book-request.model';
 
 export type BookSortBy = 'name' | 'author' | 'stock';
 export type BookSortDirection = 'asc' | 'desc';
+export type BookStockStatus = 'all' | 'inStock' | 'outOfStock';
 
 export interface GetBooksQuery {
   page?: number;
@@ -17,6 +18,8 @@ export interface GetBooksQuery {
   search?: string;
   sortBy?: BookSortBy;
   sortDirection?: BookSortDirection;
+  stockStatus?: BookStockStatus;
+  category?: BookCategory | null;
 }
 
 @Injectable({
@@ -31,15 +34,21 @@ export class BooksApiService {
     const pageSize = query.pageSize ?? 20;
     const sortBy = query.sortBy ?? 'name';
     const sortDirection = query.sortDirection ?? 'asc';
+    const stockStatus = query.stockStatus ?? 'all';
     let params = new HttpParams()
       .set('page', page)
       .set('pageSize', pageSize)
       .set('sortBy', sortBy)
-      .set('sortDirection', sortDirection);
+      .set('sortDirection', sortDirection)
+      .set('stockStatus', stockStatus);
     const trimmedSearch = query.search?.trim();
 
     if (trimmedSearch) {
       params = params.set('search', trimmedSearch);
+    }
+
+    if (query.category) {
+      params = params.set('category', query.category);
     }
 
     return this.http.get<PagedBooksResponse>(this.apiUrl, { params });
