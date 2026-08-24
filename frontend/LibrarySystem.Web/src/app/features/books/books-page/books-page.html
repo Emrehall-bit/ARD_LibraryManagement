@@ -181,9 +181,14 @@
                   size="small"
                   styleClass="book-card__borrow-button"
                   [loading]="isBorrowing(book.id)"
-                  [disabled]="book.stock === 0 || isBorrowing(book.id) || isDeleting(book.id)"
+                  [disabled]="isBorrowDisabled(book)"
                   (onClick)="borrowBook(book)"
                 />
+                @if (shouldShowOverdueBorrowRestriction(book)) {
+                  <small class="book-card__borrow-restriction">
+                    Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.
+                  </small>
+                }
                 @if (isAdmin()) {
                   <div class="book-card__manage-actions flex gap-2">
                     <p-button

@@ -78,6 +78,9 @@
                       <small [class.loan-row__due-date--overdue]="isOverdue(loan)">
                         Son Teslim: {{ getDueDateLabel(loan) }}
                       </small>
+                      @if (getOverdueDaysLabel(loan); as overdueLabel) {
+                        <small class="loan-row__overdue-days">{{ overdueLabel }}</small>
+                      }
                       <p-tag
                         styleClass="loan-row__status"
                         [value]="getStatusLabel(loan)"
@@ -126,6 +129,9 @@
                       <span [class.loan-row__due-date--overdue]="isOverdue(book)">
                         {{ getDueDateLabel(book) }}
                       </span>
+                      @if (getOverdueDaysLabel(book); as overdueLabel) {
+                        <small class="loan-row__overdue-days">{{ overdueLabel }}</small>
+                      }
                     </div>
                     <div class="col-12 md:col-2 loan-row__status-cell">
                       <small>Durum</small>

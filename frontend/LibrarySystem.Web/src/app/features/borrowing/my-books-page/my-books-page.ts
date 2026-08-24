@@ -9,6 +9,7 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
 
+import { getOverdueDaysLabel } from '../borrow-due-date-display';
 import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrow-status-display';
 import { BorrowedBook } from '../models/borrowed-book.model';
 import { BorrowingApiService } from '../services/borrowing-api.service';
@@ -156,6 +157,10 @@ export class MyBooksPageComponent implements OnInit {
 
   protected isOverdue(item: BorrowedBook): boolean {
     return item.status === 'Overdue';
+  }
+
+  protected getOverdueDaysLabel(item: BorrowedBook): string | null {
+    return getOverdueDaysLabel(item);
   }
 
   protected canRenew(item: BorrowedBook): boolean {

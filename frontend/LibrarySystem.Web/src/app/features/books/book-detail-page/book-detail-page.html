@@ -57,11 +57,16 @@
                 [label]="getBorrowLabel(selectedBook.stock)"
                 [icon]="getBorrowIcon(selectedBook.stock)"
                 [loading]="isBorrowing()"
-                [disabled]="selectedBook.stock === 0 || isBorrowing()"
+                [disabled]="isBorrowDisabled(selectedBook.stock)"
                 styleClass="book-detail__borrow-button"
                 (onClick)="borrowBook()"
               />
             </div>
+            @if (shouldShowOverdueBorrowRestriction(selectedBook.stock)) {
+              <small class="book-detail__borrow-restriction">
+                Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.
+              </small>
+            }
           </div>
         </article>
       </ng-template>

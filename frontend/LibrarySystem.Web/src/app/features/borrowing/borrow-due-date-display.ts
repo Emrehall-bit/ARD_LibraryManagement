@@ -31,6 +31,18 @@ export function getUpcomingBorrowDueDisplay(
   };
 }
 
+export function getOverdueDaysLabel(borrowedBook: BorrowedBook): string | null {
+  if (borrowedBook.status !== 'Overdue' || borrowedBook.overdueDays <= 0) {
+    return null;
+  }
+
+  return `${borrowedBook.overdueDays} gün gecikmiş`;
+}
+
+export function hasActiveOverdueBorrow(borrowedBooks: readonly BorrowedBook[]): boolean {
+  return borrowedBooks.some((borrowedBook) => borrowedBook.status === 'Overdue');
+}
+
 function getRemainingCalendarDays(dueDateValue: string, now: Date): number {
   const dueDate = new Date(dueDateValue);
 

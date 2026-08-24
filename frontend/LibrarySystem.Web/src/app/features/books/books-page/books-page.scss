@@ -131,6 +131,15 @@
   margin-top: 0.5rem;
 }
 
+.book-card__borrow-restriction {
+  display: block;
+  margin-top: 0.45rem;
+  color: #b42318;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
 .book-card__tags {
   flex-wrap: wrap;
 }

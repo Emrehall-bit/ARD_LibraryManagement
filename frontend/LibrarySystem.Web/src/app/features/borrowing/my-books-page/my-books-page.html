@@ -39,6 +39,9 @@
                     <small [class.my-book-card__due-date--overdue]="isOverdue(item)">
                       Son Teslim Tarihi: {{ getDueDateLabel(item) }}
                     </small>
+                    @if (getOverdueDaysLabel(item); as overdueLabel) {
+                      <small class="my-book-card__overdue-days">{{ overdueLabel }}</small>
+                    }
                   </div>
                 </div>
 

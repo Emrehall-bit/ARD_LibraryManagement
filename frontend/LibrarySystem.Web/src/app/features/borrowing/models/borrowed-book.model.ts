@@ -10,4 +10,5 @@ export interface BorrowedBook {
   returnedAt: string | null;
   status: BorrowStatus;
   renewalCount: number;
+  overdueDays: number;
 }

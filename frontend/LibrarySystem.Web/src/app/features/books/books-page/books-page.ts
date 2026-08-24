@@ -22,6 +22,7 @@ import { finalize } from 'rxjs';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { LibraryRealtimeService } from '../../../core/realtime/library-realtime.service';
+import { hasActiveOverdueBorrow } from '../../borrowing/borrow-due-date-display';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { BookCategoryOption, getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
@@ -117,6 +118,7 @@ export class BooksPageComponent implements OnInit {
   protected readonly isUpdating = signal(false);
   protected readonly editErrorMessage = signal<string | null>(null);
   protected readonly deletingBookId = signal<string | null>(null);
+  protected readonly hasOverdueBorrow = signal(false);
   protected readonly isAdmin = this.authState.isAdmin;
   protected readonly isAuthenticated = this.authState.isAuthenticated;
   protected readonly pageSizeOptions = [20, 40, 60, 100];
@@ -182,6 +184,7 @@ export class BooksPageComponent implements OnInit {
       .subscribe((event) => this.updateBookStock(event.bookId, event.stock));
 
     this.loadBooks();
+    this.loadBorrowEligibility();
   }
 
   protected updateSearchTerm(value: string): void {
@@ -334,8 +337,19 @@ export class BooksPageComponent implements OnInit {
     return this.deletingBookId() === bookId;
   }
 
+  protected isBorrowDisabled(book: Book): boolean {
+    return book.stock === 0 ||
+      this.isBorrowing(book.id) ||
+      this.isDeleting(book.id) ||
+      (this.isAuthenticated() && this.hasOverdueBorrow());
+  }
+
+  protected shouldShowOverdueBorrowRestriction(book: Book): boolean {
+    return book.stock > 0 && this.isAuthenticated() && this.hasOverdueBorrow();
+  }
+
   protected borrowBook(book: Book): void {
-    if (book.stock <= 0 || this.borrowingBookId()) {
+    if (book.stock <= 0 || this.borrowingBookId() || (this.isAuthenticated() && this.hasOverdueBorrow())) {
       return;
     }
 
@@ -573,6 +587,25 @@ export class BooksPageComponent implements OnInit {
     this.loadBooks();
   }
 
+  private loadBorrowEligibility(): void {
+    if (!this.isAuthenticated()) {
+      this.hasOverdueBorrow.set(false);
+      return;
+    }
+
+    this.borrowingApi
+      .getMyBooks()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (borrowedBooks) => {
+          this.hasOverdueBorrow.set(hasActiveOverdueBorrow(borrowedBooks));
+        },
+        error: () => {
+          this.hasOverdueBorrow.set(false);
+        }
+      });
+  }
+
   private updateBookStock(bookId: string, stock: number): void {
     if (!this.books().some((book) => book.id === bookId)) {
       return;
@@ -606,6 +639,10 @@ export class BooksPageComponent implements OnInit {
 
     if (error.status === 400 && problem?.detail?.includes('is already borrowed by the current user')) {
       return 'Bu kitabı zaten ödünç aldınız.';
+    }
+
+    if (error.status === 400 && problem?.detail?.includes('User has overdue borrowed books')) {
+      return 'Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.';
     }
 
     if (error.status === 409 && problem?.title === 'Concurrency conflict.') {

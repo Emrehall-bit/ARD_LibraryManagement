@@ -13,6 +13,7 @@ import { finalize } from 'rxjs';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { LibraryRealtimeService } from '../../../core/realtime/library-realtime.service';
+import { hasActiveOverdueBorrow } from '../../borrowing/borrow-due-date-display';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
@@ -50,6 +51,7 @@ export class BookDetailPageComponent implements OnInit {
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isBorrowing = signal(false);
+  protected readonly hasOverdueBorrow = signal(false);
   protected readonly isAuthenticated = this.authState.isAuthenticated;
 
   ngOnInit(): void {
@@ -71,6 +73,8 @@ export class BookDetailPageComponent implements OnInit {
 
         this.loadBook(id);
       });
+
+    this.loadBorrowEligibility();
   }
 
   protected getCoverClass(book: Book): string {
@@ -108,10 +112,21 @@ export class BookDetailPageComponent implements OnInit {
     return this.isAuthenticated() ? 'pi pi-bookmark' : 'pi pi-lock';
   }
 
+  protected isBorrowDisabled(stock: number): boolean {
+    return stock === 0 || this.isBorrowing() || (this.isAuthenticated() && this.hasOverdueBorrow());
+  }
+
+  protected shouldShowOverdueBorrowRestriction(stock: number): boolean {
+    return stock > 0 && this.isAuthenticated() && this.hasOverdueBorrow();
+  }
+
   protected borrowBook(): void {
     const currentBook = this.book();
 
-    if (!currentBook || currentBook.stock <= 0 || this.isBorrowing()) {
+    if (!currentBook ||
+      currentBook.stock <= 0 ||
+      this.isBorrowing() ||
+      (this.isAuthenticated() && this.hasOverdueBorrow())) {
       return;
     }
 
@@ -167,6 +182,25 @@ export class BookDetailPageComponent implements OnInit {
     this.book.update((book) => book?.id === bookId ? { ...book, stock } : book);
   }
 
+  private loadBorrowEligibility(): void {
+    if (!this.isAuthenticated()) {
+      this.hasOverdueBorrow.set(false);
+      return;
+    }
+
+    this.borrowingApi
+      .getMyBooks()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (borrowedBooks) => {
+          this.hasOverdueBorrow.set(hasActiveOverdueBorrow(borrowedBooks));
+        },
+        error: () => {
+          this.hasOverdueBorrow.set(false);
+        }
+      });
+  }
+
   private getLoadErrorMessage(error: unknown): string {
     if (error instanceof HttpErrorResponse && error.status === 404) {
       return 'Kitap bulunamadı.';
@@ -188,6 +222,10 @@ export class BookDetailPageComponent implements OnInit {
 
     if (error.status === 400 && problem?.detail?.includes('is already borrowed by the current user')) {
       return 'Bu kitabı zaten ödünç aldınız.';
+    }
+
+    if (error.status === 400 && problem?.detail?.includes('User has overdue borrowed books')) {
+      return 'Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.';
     }
 
     if (error.status === 409 && problem?.title === 'Concurrency conflict.') {

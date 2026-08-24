@@ -9,7 +9,11 @@ import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TagModule } from 'primeng/tag';
 
-import { BorrowDueDateDisplay, getUpcomingBorrowDueDisplay } from '../borrowing/borrow-due-date-display';
+import {
+  BorrowDueDateDisplay,
+  getOverdueDaysLabel,
+  getUpcomingBorrowDueDisplay
+} from '../borrowing/borrow-due-date-display';
 import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrowing/borrow-status-display';
 import { BorrowedBook } from '../borrowing/models/borrowed-book.model';
 import { BorrowingApiService } from '../borrowing/services/borrowing-api.service';
@@ -153,6 +157,10 @@ export class DashboardComponent implements OnInit {
 
   protected isOverdue(item: BorrowedBook): boolean {
     return item.status === 'Overdue';
+  }
+
+  protected getOverdueDaysLabel(item: BorrowedBook): string | null {
+    return getOverdueDaysLabel(item);
   }
 
   private loadDashboardData(): void {
