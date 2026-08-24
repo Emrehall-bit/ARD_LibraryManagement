@@ -19,6 +19,8 @@ import { BorrowedBook } from '../borrowing/models/borrowed-book.model';
 import { BorrowingApiService } from '../borrowing/services/borrowing-api.service';
 import { Book } from '../books/models/book.model';
 import { BooksApiService } from '../books/services/books-api.service';
+import { AdminDashboardSummary, AdminRecentOverdueBorrow } from './models/admin-dashboard-summary.model';
+import { AdminDashboardApiService } from './services/admin-dashboard-api.service';
 import { AuthStateService } from '../../core/auth/auth-state.service';
 import { LibraryRealtimeService } from '../../core/realtime/library-realtime.service';
 
@@ -42,6 +44,7 @@ interface UpcomingBorrowedBook {
 })
 export class DashboardComponent implements OnInit {
   private readonly authState = inject(AuthStateService);
+  private readonly adminDashboardApi = inject(AdminDashboardApiService);
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
   private readonly destroyRef = inject(DestroyRef);
@@ -63,9 +66,13 @@ export class DashboardComponent implements OnInit {
   protected readonly books = signal<Book[]>([]);
   protected readonly totalBookCount = signal(0);
   protected readonly borrowedBooks = signal<BorrowedBook[]>([]);
+  protected readonly adminSummary = signal<AdminDashboardSummary | null>(null);
+  protected readonly isAdminLoading = signal(false);
+  protected readonly adminErrorMessage = signal<string | null>(null);
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isAuthenticated = this.authState.isAuthenticated;
+  protected readonly isAdminDashboard = this.authState.isAdmin;
 
   protected readonly catalogBooks = computed(() => this.books().slice(0, 4));
   protected readonly recentBorrowedBooks = computed(() => this.borrowedBooks().slice(0, 3));
@@ -109,8 +116,35 @@ export class DashboardComponent implements OnInit {
       tone: 'warning'
     }
   ]);
+  protected readonly adminSummaryItems = computed<SummaryItem[]>(() => {
+    const summary = this.adminSummary();
+
+    if (!summary) {
+      return [];
+    }
+
+    return [
+      { label: 'Toplam Kullanıcı', value: summary.totalUsers.toString(), icon: 'pi pi-users', tone: 'teal' },
+      { label: 'Toplam Kitap', value: summary.totalBooks.toString(), icon: 'pi pi-book', tone: 'gold' },
+      { label: 'Toplam Stok', value: summary.totalStock.toString(), icon: 'pi pi-box', tone: 'teal' },
+      {
+        label: 'Stokta Olmayan',
+        value: summary.outOfStockBooks.toString(),
+        icon: 'pi pi-exclamation-circle',
+        tone: 'warning'
+      },
+      { label: 'Aktif Ödünç', value: summary.activeBorrows.toString(), icon: 'pi pi-bookmark', tone: 'teal' },
+      { label: 'Gecikmiş Ödünç', value: summary.overdueBorrows.toString(), icon: 'pi pi-clock', tone: 'danger' },
+      { label: 'İade Edilmiş', value: summary.returnedBorrows.toString(), icon: 'pi pi-check-circle', tone: 'gold' }
+    ];
+  });
 
   ngOnInit(): void {
+    if (this.isAdminDashboard()) {
+      this.loadAdminDashboardData();
+      return;
+    }
+
     void this.libraryRealtime.start();
     this.libraryRealtime.bookStockChanged$
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -161,6 +195,41 @@ export class DashboardComponent implements OnInit {
 
   protected getOverdueDaysLabel(item: BorrowedBook): string | null {
     return getOverdueDaysLabel(item);
+  }
+
+  protected getAdminDueDateLabel(item: AdminRecentOverdueBorrow): string {
+    return this.dueDateFormatter.format(new Date(item.dueDate));
+  }
+
+  protected getAdminOverdueDaysLabel(item: AdminRecentOverdueBorrow): string {
+    return item.overdueDays === 1
+      ? '1 gün gecikmiş'
+      : `${item.overdueDays} gün gecikmiş`;
+  }
+
+  protected getAdminBookName(item: AdminRecentOverdueBorrow): string {
+    return item.bookName || 'Kitap adı bulunamadı';
+  }
+
+  protected getAdminAuthor(item: AdminRecentOverdueBorrow): string {
+    return item.author || 'Yazar bilgisi bulunamadı';
+  }
+
+  private loadAdminDashboardData(): void {
+    this.isAdminLoading.set(true);
+    this.adminErrorMessage.set(null);
+
+    this.adminDashboardApi
+      .getSummary()
+      .pipe(finalize(() => this.isAdminLoading.set(false)))
+      .subscribe({
+        next: (summary) => {
+          this.adminSummary.set(summary);
+        },
+        error: () => {
+          this.adminErrorMessage.set('Yönetim paneli verileri yüklenirken bir hata oluştu.');
+        }
+      });
   }
 
   private loadDashboardData(): void {
