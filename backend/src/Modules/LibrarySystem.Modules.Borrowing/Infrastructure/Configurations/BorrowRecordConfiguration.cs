@@ -31,6 +31,10 @@ internal sealed class BorrowRecordConfiguration : IEntityTypeConfiguration<Borro
             .HasColumnName("borrowed_at")
             .IsRequired();
 
+        builder.Property(borrowRecord => borrowRecord.DueDate)
+            .HasColumnName("due_date")
+            .IsRequired();
+
         builder.Property(borrowRecord => borrowRecord.ReturnedAt)
             .HasColumnName("returned_at");
 

@@ -30,6 +30,19 @@ internal sealed class BorrowRepository(BorrowingDbContext dbContext) : IBorrowRe
                 borrowRecord.UserId == userId &&
                 borrowRecord.ReturnedAt == null)
             .OrderByDescending(borrowRecord => borrowRecord.BorrowedAt)
+            .ThenBy(borrowRecord => borrowRecord.Id)
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BorrowRecord>> GetByUserIdAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.BorrowRecords
+            .AsNoTracking()
+            .Where(borrowRecord => borrowRecord.UserId == userId)
+            .OrderByDescending(borrowRecord => borrowRecord.BorrowedAt)
+            .ThenBy(borrowRecord => borrowRecord.Id)
             .ToListAsync(cancellationToken);
     }
 

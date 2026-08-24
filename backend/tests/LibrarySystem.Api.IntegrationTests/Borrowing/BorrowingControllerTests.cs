@@ -29,8 +29,10 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     {
         using var client = factory.CreateApiClient();
         var bookId = await SeedBookAsync(stock: 2);
+        var beforeBorrow = DateTime.UtcNow;
 
         var response = await client.PostAsync($"/api/borrow/{bookId}", content: null);
+        var afterBorrow = DateTime.UtcNow;
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
@@ -38,7 +40,12 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.NotNull(borrowRecord);
         Assert.Equal(bookId, borrowRecord.BookId);
+        Assert.InRange(borrowRecord.BorrowedAt, beforeBorrow.AddSeconds(-1), afterBorrow.AddSeconds(1));
+        Assert.Equal(
+            TimeSpan.FromDays(BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            borrowRecord.DueDate - borrowRecord.BorrowedAt);
         Assert.Null(borrowRecord.ReturnedAt);
+        Assert.Equal(nameof(BorrowStatus.Borrowed), borrowRecord.Status);
 
         using var scope = factory.Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -54,6 +61,9 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Equal(1, stock);
         Assert.Equal(TestAuthenticationHandler.UserId, storedBorrowRecord.UserId);
         Assert.Equal(bookId, storedBorrowRecord.BookId);
+        Assert.Equal(
+            TimeSpan.FromDays(BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            storedBorrowRecord.DueDate - storedBorrowRecord.BorrowedAt);
         Assert.Null(storedBorrowRecord.ReturnedAt);
     }
 
@@ -136,7 +146,9 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Equal(currentUserBookId, borrowRecord.BookId);
         Assert.Equal(currentUserBookName, borrowRecord.BookName);
         Assert.Equal(currentUserBookAuthor, borrowRecord.Author);
+        Assert.NotEqual(default, borrowRecord.DueDate);
         Assert.Null(borrowRecord.ReturnedAt);
+        Assert.Equal(nameof(BorrowStatus.Borrowed), borrowRecord.Status);
     }
 
     [Fact]
@@ -174,6 +186,32 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     }
 
     [Fact]
+    public async Task GetMyBooks_WithPastDueActiveBorrow_ReturnsOverdueStatus()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = DateTime.UtcNow.AddDays(-20);
+        var bookId = await SeedBookAsync(name: "Overdue Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            dueDate: borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays));
+
+        var response = await client.GetAsync("/api/borrow/my-books");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.Equal(bookId, borrowRecord.BookId);
+        Assert.Equal(nameof(BorrowStatus.Overdue), borrowRecord.Status);
+        Assert.Null(borrowRecord.ReturnedAt);
+    }
+
+    [Fact]
     public async Task ReturnBook_WithActiveBorrow_ReturnsSuccess()
     {
         using var client = factory.CreateApiClient();
@@ -188,7 +226,9 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.NotNull(borrowRecord);
         Assert.Equal(bookId, borrowRecord.BookId);
+        Assert.NotEqual(default, borrowRecord.DueDate);
         Assert.NotNull(borrowRecord.ReturnedAt);
+        Assert.Equal(nameof(BorrowStatus.Returned), borrowRecord.Status);
 
         using var scope = factory.Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -203,6 +243,30 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(2, stock);
         Assert.NotNull(storedBorrowRecord.ReturnedAt);
+    }
+
+    [Fact]
+    public async Task ReturnBook_WithOverdueBorrow_ReturnsSuccess()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = DateTime.UtcNow.AddDays(-20);
+        var bookId = await SeedBookAsync(name: "Return Overdue Book", stock: 1);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            dueDate: borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays));
+
+        var response = await client.PostAsync($"/api/return/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecord = await response.Content.ReadFromJsonAsync<BorrowRecordResponse>();
+
+        Assert.NotNull(borrowRecord);
+        Assert.NotNull(borrowRecord.ReturnedAt);
+        Assert.Equal(nameof(BorrowStatus.Returned), borrowRecord.Status);
     }
 
     [Fact]
@@ -228,6 +292,135 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task GetHistory_ReturnsActiveAndReturnedBorrowRecords()
+    {
+        using var client = factory.CreateApiClient();
+        var activeBookId = await SeedBookAsync(name: "History Active Book", stock: 2);
+        var returnedBookId = await SeedBookAsync(name: "History Returned Book", stock: 2);
+        var returnedBorrowedAt = DateTime.UtcNow.AddDays(-3);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, activeBookId);
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            returnedBookId,
+            borrowedAt: returnedBorrowedAt,
+            returnedAt: returnedBorrowedAt.AddDays(1));
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        Assert.Equal(2, borrowRecords.Count);
+        Assert.Contains(borrowRecords, borrowRecord =>
+            borrowRecord.BookId == activeBookId &&
+            borrowRecord.Status == nameof(BorrowStatus.Borrowed));
+        Assert.Contains(borrowRecords, borrowRecord =>
+            borrowRecord.BookId == returnedBookId &&
+            borrowRecord.Status == nameof(BorrowStatus.Returned) &&
+            borrowRecord.ReturnedAt is not null);
+    }
+
+    [Fact]
+    public async Task GetHistory_ReturnsOnlyCurrentUsersBorrowRecords()
+    {
+        using var client = factory.CreateApiClient();
+        var currentUserBookId = await SeedBookAsync(name: "Current User History Book", stock: 2);
+        var otherUserBookId = await SeedBookAsync(name: "Other User History Book", stock: 2);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, currentUserBookId);
+        await SeedBorrowRecordAsync("history-other-user", otherUserBookId);
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.Equal(currentUserBookId, borrowRecord.BookId);
+    }
+
+    [Fact]
+    public async Task GetHistory_ReturnsBorrowRecordsNewestFirst()
+    {
+        using var client = factory.CreateApiClient();
+        var olderBookId = await SeedBookAsync(name: "Older History Book", stock: 2);
+        var newerBookId = await SeedBookAsync(name: "Newer History Book", stock: 2);
+        var olderBorrowedAt = DateTime.UtcNow.AddDays(-5);
+        var newerBorrowedAt = DateTime.UtcNow.AddDays(-1);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            olderBookId,
+            borrowedAt: olderBorrowedAt);
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            newerBookId,
+            borrowedAt: newerBorrowedAt);
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        Assert.Equal([newerBookId, olderBookId], borrowRecords.Select(borrowRecord => borrowRecord.BookId));
+    }
+
+    [Fact]
+    public async Task GetMyBooks_DoesNotReturnReturnedBorrowRecords()
+    {
+        using var client = factory.CreateApiClient();
+        var activeBookId = await SeedBookAsync(name: "My Active Book", stock: 2);
+        var returnedBookId = await SeedBookAsync(name: "My Returned Book", stock: 2);
+        var returnedBorrowedAt = DateTime.UtcNow.AddDays(-2);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, activeBookId);
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            returnedBookId,
+            borrowedAt: returnedBorrowedAt,
+            returnedAt: returnedBorrowedAt.AddDays(1));
+
+        var response = await client.GetAsync("/api/borrow/my-books");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.Equal(activeBookId, borrowRecord.BookId);
+    }
+
+    [Fact]
+    public async Task GetHistory_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(IdentityRoles.Member)]
+    [InlineData(IdentityRoles.Admin)]
+    public async Task GetHistory_WithAuthenticatedRole_ReturnsSuccess(string role)
+    {
+        using var client = CreateAuthenticatedClient(role, $"history-{role.ToLowerInvariant()}-user");
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     private async Task<Guid> SeedBookAsync(
         string name = "Clean Code",
         string author = "Robert C. Martin",
@@ -243,14 +436,22 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         return book.Id;
     }
 
-    private async Task SeedBorrowRecordAsync(
+    private async Task<Guid> SeedBorrowRecordAsync(
         string userId,
         Guid bookId,
+        DateTime? borrowedAt = null,
+        DateTime? dueDate = null,
         DateTime? returnedAt = null)
     {
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
-        var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, DateTime.UtcNow.AddMinutes(-5));
+        var resolvedBorrowedAt = borrowedAt ?? DateTime.UtcNow.AddMinutes(-5);
+        var borrowRecord = new BorrowRecord(
+            Guid.NewGuid(),
+            userId,
+            bookId,
+            resolvedBorrowedAt,
+            dueDate ?? resolvedBorrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays));
 
         if (returnedAt is not null)
         {
@@ -259,6 +460,8 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         await dbContext.BorrowRecords.AddAsync(borrowRecord);
         await dbContext.SaveChangesAsync();
+
+        return borrowRecord.Id;
     }
 
     private HttpClient CreateAuthenticatedClient(string role, string userId)
@@ -278,5 +481,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         string? BookName,
         string? Author,
         DateTime BorrowedAt,
-        DateTime? ReturnedAt);
+        DateTime DueDate,
+        DateTime? ReturnedAt,
+        string Status);
 }

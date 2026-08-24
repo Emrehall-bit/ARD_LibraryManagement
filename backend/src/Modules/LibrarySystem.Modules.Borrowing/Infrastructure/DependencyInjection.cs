@@ -22,6 +22,7 @@ public static class DependencyInjection
 
         services.AddScoped<IBorrowRepository, BorrowRepository>();
         services.AddScoped<IBorrowingService, BorrowingService>();
+        services.AddSingleton<IBorrowingClock, SystemBorrowingClock>();
         services.AddScoped<IBorrowingTransactionCoordinator, BorrowingTransactionCoordinator>();
 
         return services;

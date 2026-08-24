@@ -48,4 +48,15 @@ public sealed class BorrowingController(IBorrowingService borrowingService) : Co
 
         return Ok(borrowRecords);
     }
+
+    [HttpGet("history")]
+    [ProducesResponseType(typeof(IReadOnlyList<BorrowRecordResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<IReadOnlyList<BorrowRecordResponseDto>>> GetHistory(
+        CancellationToken cancellationToken)
+    {
+        var borrowRecords = await borrowingService.GetHistoryAsync(cancellationToken);
+
+        return Ok(borrowRecords);
+    }
 }

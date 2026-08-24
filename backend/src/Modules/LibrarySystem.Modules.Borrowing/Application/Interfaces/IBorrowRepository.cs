@@ -13,6 +13,10 @@ public interface IBorrowRepository
         string userId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<BorrowRecord>> GetByUserIdAsync(
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(
         BorrowRecord borrowRecord,
         CancellationToken cancellationToken = default);

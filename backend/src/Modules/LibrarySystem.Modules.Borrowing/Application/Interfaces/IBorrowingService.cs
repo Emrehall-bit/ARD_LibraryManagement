@@ -14,4 +14,7 @@ public interface IBorrowingService
 
     Task<IReadOnlyList<BorrowRecordResponseDto>> GetMyBooksAsync(
         CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<BorrowRecordResponseDto>> GetHistoryAsync(
+        CancellationToken cancellationToken = default);
 }

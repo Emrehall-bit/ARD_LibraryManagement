@@ -6,4 +6,6 @@ public sealed record BorrowRecordResponseDto(
     string? BookName,
     string? Author,
     DateTime BorrowedAt,
-    DateTime? ReturnedAt);
+    DateTime DueDate,
+    DateTime? ReturnedAt,
+    string Status);

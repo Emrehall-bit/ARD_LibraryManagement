@@ -12,6 +12,7 @@ internal sealed class BorrowingService(
     IBookInventoryService bookInventoryService,
     IBookLookupService bookLookupService,
     ICurrentUser currentUser,
+    IBorrowingClock clock,
     IBorrowingTransactionCoordinator transactionCoordinator) : IBorrowingService
 {
     public async Task<BorrowRecordResponseDto> BorrowBookAsync(
@@ -43,12 +44,13 @@ internal sealed class BorrowingService(
 
             await bookInventoryService.DecreaseStockAsync(bookId, transactionCancellationToken);
 
-            var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, DateTime.UtcNow);
+            var borrowedAt = clock.UtcNow;
+            var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, borrowedAt);
 
             await borrowRepository.AddAsync(borrowRecord, transactionCancellationToken);
             await borrowRepository.SaveChangesAsync(transactionCancellationToken);
 
-            return MapToResponseDto(borrowRecord);
+            return MapToResponseDto(borrowRecord, clock.UtcNow);
         }, cancellationToken);
     }
 
@@ -70,12 +72,12 @@ internal sealed class BorrowingService(
                 throw new NotFoundException($"Active borrow record for book id '{bookId}' was not found.");
             }
 
-            borrowRecord.Return(DateTime.UtcNow);
+            borrowRecord.Return(clock.UtcNow);
             await borrowRepository.UpdateAsync(borrowRecord, transactionCancellationToken);
             await bookInventoryService.IncreaseStockAsync(bookId, transactionCancellationToken);
             await borrowRepository.SaveChangesAsync(transactionCancellationToken);
 
-            return MapToResponseDto(borrowRecord);
+            return MapToResponseDto(borrowRecord, clock.UtcNow);
         }, cancellationToken);
     }
 
@@ -92,11 +94,23 @@ internal sealed class BorrowingService(
         var books = await bookLookupService.GetByIdsAsync(bookIds, cancellationToken);
         var booksById = books.ToDictionary(book => book.Id);
 
-        return borrowRecords
-            .Select(borrowRecord => MapToResponseDto(
-                borrowRecord,
-                booksById.GetValueOrDefault(borrowRecord.BookId)))
-            .ToList();
+        return MapToResponseDtos(borrowRecords, booksById);
+    }
+
+    public async Task<IReadOnlyList<BorrowRecordResponseDto>> GetHistoryAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        var borrowRecords = await borrowRepository.GetByUserIdAsync(userId, cancellationToken);
+        var bookIds = borrowRecords
+            .Select(borrowRecord => borrowRecord.BookId)
+            .Distinct()
+            .ToArray();
+
+        var books = await bookLookupService.GetByIdsAsync(bookIds, cancellationToken);
+        var booksById = books.ToDictionary(book => book.Id);
+
+        return MapToResponseDtos(borrowRecords, booksById);
     }
 
     private string GetCurrentUserId()
@@ -109,13 +123,28 @@ internal sealed class BorrowingService(
         return currentUser.UserId;
     }
 
-    private static BorrowRecordResponseDto MapToResponseDto(BorrowRecord borrowRecord)
+    private IReadOnlyList<BorrowRecordResponseDto> MapToResponseDtos(
+        IReadOnlyList<BorrowRecord> borrowRecords,
+        IReadOnlyDictionary<Guid, BookLookupItem> booksById)
     {
-        return MapToResponseDto(borrowRecord, book: null);
+        var utcNow = clock.UtcNow;
+
+        return borrowRecords
+            .Select(borrowRecord => MapToResponseDto(
+                borrowRecord,
+                utcNow,
+                booksById.GetValueOrDefault(borrowRecord.BookId)))
+            .ToList();
+    }
+
+    private static BorrowRecordResponseDto MapToResponseDto(BorrowRecord borrowRecord, DateTime utcNow)
+    {
+        return MapToResponseDto(borrowRecord, utcNow, book: null);
     }
 
     private static BorrowRecordResponseDto MapToResponseDto(
         BorrowRecord borrowRecord,
+        DateTime utcNow,
         BookLookupItem? book)
     {
         return new BorrowRecordResponseDto(
@@ -124,7 +153,8 @@ internal sealed class BorrowingService(
             book?.Name,
             book?.Author,
             borrowRecord.BorrowedAt,
-            borrowRecord.ReturnedAt);
+            borrowRecord.DueDate,
+            borrowRecord.ReturnedAt,
+            borrowRecord.GetStatus(utcNow).ToString());
     }
-
 }

@@ -7,6 +7,11 @@ public sealed class BorrowRecord
     }
 
     public BorrowRecord(Guid id, string userId, Guid bookId, DateTime borrowedAt)
+        : this(id, userId, bookId, borrowedAt, borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays))
+    {
+    }
+
+    public BorrowRecord(Guid id, string userId, Guid bookId, DateTime borrowedAt, DateTime dueDate)
     {
         if (id == Guid.Empty)
         {
@@ -28,10 +33,21 @@ public sealed class BorrowRecord
             throw new ArgumentException("Borrowed at must be specified.", nameof(borrowedAt));
         }
 
+        if (dueDate == default)
+        {
+            throw new ArgumentException("Due date must be specified.", nameof(dueDate));
+        }
+
+        if (dueDate < borrowedAt)
+        {
+            throw new ArgumentOutOfRangeException(nameof(dueDate), "Due date cannot be earlier than borrowed at.");
+        }
+
         Id = id;
         UserId = userId.Trim();
         BookId = bookId;
         BorrowedAt = borrowedAt;
+        DueDate = dueDate;
         ReturnedAt = null;
     }
 
@@ -43,7 +59,21 @@ public sealed class BorrowRecord
 
     public DateTime BorrowedAt { get; private set; }
 
+    public DateTime DueDate { get; private set; }
+
     public DateTime? ReturnedAt { get; private set; }
+
+    public BorrowStatus GetStatus(DateTime utcNow)
+    {
+        if (ReturnedAt is not null)
+        {
+            return BorrowStatus.Returned;
+        }
+
+        return DueDate < utcNow
+            ? BorrowStatus.Overdue
+            : BorrowStatus.Borrowed;
+    }
 
     public void Return(DateTime returnedAt)
     {
