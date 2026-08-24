@@ -97,6 +97,15 @@
                   <p-tag [value]="getStockLabel(book.stock)" [severity]="getStockSeverity(book.stock)" />
                 </div>
                 <p-button
+                  label="Detayları Gör"
+                  icon="pi pi-arrow-right"
+                  size="small"
+                  severity="secondary"
+                  [outlined]="true"
+                  styleClass="book-card__details-button"
+                  (onClick)="viewDetails(book)"
+                />
+                <p-button
                   label="Ödünç Al"
                   icon="pi pi-bookmark"
                   size="small"

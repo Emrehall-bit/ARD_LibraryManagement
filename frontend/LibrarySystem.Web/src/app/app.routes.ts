@@ -27,6 +27,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/dashboard/dashboard').then((component) => component.DashboardComponent)
       },
       {
+        path: 'books/:id',
+        loadComponent: () =>
+          import('./features/books/book-detail-page/book-detail-page').then((component) => component.BookDetailPageComponent)
+      },
+      {
         path: 'books',
         loadComponent: () => import('./features/books/books-page/books-page').then((component) => component.BooksPageComponent)
       },

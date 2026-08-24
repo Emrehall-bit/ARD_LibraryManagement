@@ -19,6 +19,7 @@ import { finalize } from 'rxjs';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
+import { BookCategoryOption, getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
 import { UpdateBookRequest } from '../models/update-book-request.model';
@@ -41,11 +42,6 @@ interface BookSortOption {
 interface StockStatusOption {
   label: string;
   value: BookStockStatus;
-}
-
-interface BookCategoryOption {
-  label: string;
-  value: BookCategory;
 }
 
 interface CategoryFilterOption {
@@ -258,7 +254,11 @@ export class BooksPageComponent implements OnInit {
   }
 
   protected getCategoryLabel(category: BookCategory): string {
-    return this.categoryOptions.find((option) => option.value === category)?.label ?? 'Diğer';
+    return getBookCategoryLabel(category);
+  }
+
+  protected viewDetails(book: Book): void {
+    this.router.navigate(['/books', book.id]);
   }
 
   protected getEmptyStateMessage(): string {

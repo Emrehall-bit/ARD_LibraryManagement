@@ -1,0 +1,72 @@
+<p-toast />
+
+<section class="book-detail-page">
+  <div class="book-detail-page__toolbar">
+    <p-button
+      label="Kataloğa Dön"
+      icon="pi pi-arrow-left"
+      severity="secondary"
+      size="small"
+      [text]="true"
+      routerLink="/books"
+    />
+  </div>
+
+  @if (isLoading()) {
+    <div class="book-detail-page__state book-detail-page__state--loading flex flex-column align-items-center justify-content-center">
+      <p-progress-spinner ariaLabel="Kitap bilgileri yükleniyor" />
+      <span>Kitap bilgileri yükleniyor...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <p-message severity="error" size="small" class="book-detail-page__message">
+      {{ errorMessage() }}
+    </p-message>
+  } @else if (book(); as selectedBook) {
+    <p-card styleClass="book-detail-card">
+      <ng-template #content>
+        <article class="book-detail">
+          <div class="book-detail__cover-column">
+            <div class="book-detail-cover {{ getCoverClass(selectedBook) }}">
+              <span>{{ selectedBook.name }}</span>
+            </div>
+          </div>
+
+          <div class="book-detail__content">
+            <div class="book-detail__heading">
+              <p-tag [value]="getCategoryLabel(selectedBook.category)" severity="secondary" />
+              <h1>{{ selectedBook.name }}</h1>
+              <p>{{ selectedBook.author }}</p>
+            </div>
+
+            <div class="book-detail__meta">
+              <div>
+                <span>Tür</span>
+                <strong>{{ getCategoryLabel(selectedBook.category) }}</strong>
+              </div>
+              <div>
+                <span>Stok</span>
+                <p-tag
+                  [value]="getStockLabel(selectedBook.stock)"
+                  [severity]="getStockSeverity(selectedBook.stock)"
+                />
+              </div>
+            </div>
+
+            <div class="book-detail__actions">
+              @if (selectedBook.stock > 0) {
+                <p-button
+                  label="Ödünç Al"
+                  icon="pi pi-bookmark"
+                  [loading]="isBorrowing()"
+                  [disabled]="isBorrowing()"
+                  styleClass="book-detail__borrow-button"
+                  (onClick)="borrowBook()"
+                />
+              }
+            </div>
+          </div>
+        </article>
+      </ng-template>
+    </p-card>
+  }
+</section>
