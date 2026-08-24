@@ -46,6 +46,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
             borrowRecord.DueDate - borrowRecord.BorrowedAt);
         Assert.Null(borrowRecord.ReturnedAt);
         Assert.Equal(nameof(BorrowStatus.Borrowed), borrowRecord.Status);
+        Assert.Equal(0, borrowRecord.RenewalCount);
 
         using var scope = factory.Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -65,6 +66,44 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
             TimeSpan.FromDays(BorrowingLoanPolicy.DefaultLoanPeriodDays),
             storedBorrowRecord.DueDate - storedBorrowRecord.BorrowedAt);
         Assert.Null(storedBorrowRecord.ReturnedAt);
+        Assert.Equal(0, storedBorrowRecord.RenewalCount);
+
+        var notification = Assert.Single(factory.BookStockChangeNotifications.Notifications);
+        Assert.Equal(bookId, notification.BookId);
+        Assert.Equal(1, notification.Stock);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WhenStockNotificationFails_ReturnsSuccessAndKeepsCommittedChanges()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync(stock: 2);
+        factory.BookStockChangeNotifications.ThrowOnNotify = true;
+
+        try
+        {
+            var response = await client.PostAsync($"/api/borrow/{bookId}", content: null);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        }
+        finally
+        {
+            factory.BookStockChangeNotifications.ThrowOnNotify = false;
+        }
+
+        using var scope = factory.Services.CreateScope();
+        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+
+        var stock = await booksDbContext.Books
+            .Where(book => book.Id == bookId)
+            .Select(book => book.Stock)
+            .SingleAsync();
+        var borrowRecordCount = await borrowingDbContext.BorrowRecords.CountAsync();
+
+        Assert.Equal(1, stock);
+        Assert.Equal(1, borrowRecordCount);
+        Assert.Empty(factory.BookStockChangeNotifications.Notifications);
     }
 
     [Theory]
@@ -116,6 +155,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(0, stock);
         Assert.Equal(0, borrowRecordCount);
+        Assert.Empty(factory.BookStockChangeNotifications.Notifications);
     }
 
     [Fact]
@@ -243,6 +283,10 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(2, stock);
         Assert.NotNull(storedBorrowRecord.ReturnedAt);
+
+        var notification = Assert.Single(factory.BookStockChangeNotifications.Notifications);
+        Assert.Equal(bookId, notification.BookId);
+        Assert.Equal(2, notification.Stock);
     }
 
     [Fact]
@@ -279,6 +323,219 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Empty(factory.BookStockChangeNotifications.Notifications);
+    }
+
+    [Fact]
+    public async Task RenewBook_WithActiveBorrow_ExtendsDueDateAndIncrementsRenewalCount()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = CreateRecentBorrowedAt();
+        var originalDueDate = borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays);
+        var bookId = await SeedBookAsync(name: "Renewable Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            dueDate: originalDueDate);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecord = await response.Content.ReadFromJsonAsync<BorrowRecordResponse>();
+
+        Assert.NotNull(borrowRecord);
+        Assert.Equal(bookId, borrowRecord.BookId);
+        Assert.Equal(originalDueDate.AddDays(BorrowingLoanPolicy.RenewalPeriodDays), borrowRecord.DueDate);
+        Assert.Equal(1, borrowRecord.RenewalCount);
+        Assert.Equal(nameof(BorrowStatus.Borrowed), borrowRecord.Status);
+
+        using var scope = factory.Services.CreateScope();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var storedBorrowRecord = await borrowingDbContext.BorrowRecords.SingleAsync();
+
+        Assert.Equal(originalDueDate.AddDays(BorrowingLoanPolicy.RenewalPeriodDays), storedBorrowRecord.DueDate);
+        Assert.Equal(1, storedBorrowRecord.RenewalCount);
+    }
+
+    [Fact]
+    public async Task RenewBook_SecondRenewal_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync(name: "Already Renewed Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            renewalCount: BorrowingLoanPolicy.MaxRenewalCount);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task RenewBook_WithOverdueBorrow_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = DateTime.UtcNow.AddDays(-30);
+        var bookId = await SeedBookAsync(name: "Overdue Renewal Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            dueDate: DateTime.UtcNow.AddDays(-1));
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task RenewBook_WithReturnedBorrow_ReturnsNotFound()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = DateTime.UtcNow.AddDays(-3);
+        var bookId = await SeedBookAsync(name: "Returned Renewal Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            returnedAt: borrowedAt.AddDays(1));
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RenewBook_ForAnotherUsersBorrow_ReturnsNotFound()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync(name: "Other User Renewal Book", stock: 2);
+
+        await SeedBorrowRecordAsync("renewal-other-user", bookId);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task RenewBook_DoesNotChangeBookStock()
+    {
+        using var client = factory.CreateApiClient();
+        const int stock = 4;
+        var bookId = await SeedBookAsync(name: "Stock Neutral Renewal Book", stock: stock);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, bookId);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var storedStock = await booksDbContext.Books
+            .Where(book => book.Id == bookId)
+            .Select(book => book.Stock)
+            .SingleAsync();
+
+        Assert.Equal(stock, storedStock);
+        Assert.Empty(factory.BookStockChangeNotifications.Notifications);
+    }
+
+    [Fact]
+    public async Task GetMyBooks_AfterRenewal_ReturnsUpdatedDueDateAndRenewalCount()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = CreateRecentBorrowedAt();
+        var originalDueDate = borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays);
+        var expectedDueDate = originalDueDate.AddDays(BorrowingLoanPolicy.RenewalPeriodDays);
+        var bookId = await SeedBookAsync(name: "Renewed My Books Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            dueDate: originalDueDate);
+
+        var renewResponse = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+        renewResponse.EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/api/borrow/my-books");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+
+        Assert.Equal(expectedDueDate, borrowRecord.DueDate);
+        Assert.Equal(1, borrowRecord.RenewalCount);
+    }
+
+    [Fact]
+    public async Task GetHistory_AfterRenewal_ReturnsUpdatedDueDateAndRenewalCount()
+    {
+        using var client = factory.CreateApiClient();
+        var borrowedAt = CreateRecentBorrowedAt();
+        var originalDueDate = borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays);
+        var expectedDueDate = originalDueDate.AddDays(BorrowingLoanPolicy.RenewalPeriodDays);
+        var bookId = await SeedBookAsync(name: "Renewed History Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: borrowedAt,
+            dueDate: originalDueDate);
+
+        var renewResponse = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+        renewResponse.EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+
+        Assert.Equal(expectedDueDate, borrowRecord.DueDate);
+        Assert.Equal(1, borrowRecord.RenewalCount);
+    }
+
+    [Fact]
+    public async Task RenewBook_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+        var bookId = await SeedBookAsync(stock: 1);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(IdentityRoles.Member)]
+    [InlineData(IdentityRoles.Admin)]
+    public async Task RenewBook_WithAuthenticatedRole_ReturnsSuccess(string role)
+    {
+        var userId = $"renew-{role.ToLowerInvariant()}-user";
+        using var client = CreateAuthenticatedClient(role, userId);
+        var bookId = await SeedBookAsync(name: $"Renew {role} Book", stock: 2);
+
+        await SeedBorrowRecordAsync(userId, bookId);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -290,6 +547,16 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         var response = await client.PostAsync($"/api/borrow/{bookId}", content: null);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task LibraryHub_Negotiate_WithoutAuthentication_ReturnsSuccess()
+    {
+        using var client = factory.CreateUnauthenticatedApiClient();
+
+        var response = await client.PostAsync("/hubs/library/negotiate?negotiateVersion=1", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -436,11 +703,26 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         return book.Id;
     }
 
+    private static DateTime CreateRecentBorrowedAt()
+    {
+        var utcNow = DateTime.UtcNow;
+
+        return new DateTime(
+            utcNow.Year,
+            utcNow.Month,
+            utcNow.Day,
+            utcNow.Hour,
+            utcNow.Minute,
+            0,
+            DateTimeKind.Utc).AddDays(-1);
+    }
+
     private async Task<Guid> SeedBorrowRecordAsync(
         string userId,
         Guid bookId,
         DateTime? borrowedAt = null,
         DateTime? dueDate = null,
+        int renewalCount = 0,
         DateTime? returnedAt = null)
     {
         using var scope = factory.Services.CreateScope();
@@ -451,7 +733,8 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
             userId,
             bookId,
             resolvedBorrowedAt,
-            dueDate ?? resolvedBorrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays));
+            dueDate ?? resolvedBorrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            renewalCount);
 
         if (returnedAt is not null)
         {
@@ -483,5 +766,6 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         DateTime BorrowedAt,
         DateTime DueDate,
         DateTime? ReturnedAt,
-        string Status);
+        string Status,
+        int RenewalCount);
 }

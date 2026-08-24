@@ -38,6 +38,12 @@ internal sealed class BorrowRecordConfiguration : IEntityTypeConfiguration<Borro
         builder.Property(borrowRecord => borrowRecord.ReturnedAt)
             .HasColumnName("returned_at");
 
+        builder.Property(borrowRecord => borrowRecord.RenewalCount)
+            .HasColumnName("renewal_count")
+            .HasDefaultValue(0)
+            .IsConcurrencyToken()
+            .IsRequired();
+
         builder.HasIndex(borrowRecord => new { borrowRecord.UserId, borrowRecord.BookId })
             .IsUnique()
             .HasFilter("\"returned_at\" IS NULL")

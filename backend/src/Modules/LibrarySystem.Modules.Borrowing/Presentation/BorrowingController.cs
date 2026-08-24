@@ -38,6 +38,21 @@ public sealed class BorrowingController(IBorrowingService borrowingService) : Co
         return Ok(borrowRecord);
     }
 
+    [HttpPost("renew/{bookId:guid}")]
+    [ProducesResponseType(typeof(BorrowRecordResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BorrowRecordResponseDto>> RenewBook(
+        Guid bookId,
+        CancellationToken cancellationToken)
+    {
+        var borrowRecord = await borrowingService.RenewBookAsync(bookId, cancellationToken);
+
+        return Ok(borrowRecord);
+    }
+
     [HttpGet("my-books")]
     [ProducesResponseType(typeof(IReadOnlyList<BorrowRecordResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]

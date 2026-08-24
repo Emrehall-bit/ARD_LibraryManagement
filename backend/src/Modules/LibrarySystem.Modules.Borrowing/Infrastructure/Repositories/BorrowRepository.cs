@@ -1,5 +1,6 @@
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Domain;
+using LibrarySystem.Shared.Exceptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace LibrarySystem.Modules.Borrowing.Infrastructure.Repositories;
@@ -65,6 +66,15 @@ internal sealed class BorrowRepository(BorrowingDbContext dbContext) : IBorrowRe
 
     public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        await dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw new ConcurrencyConflictException(
+                "The borrow record could not be updated because it was changed concurrently.",
+                exception);
+        }
     }
 }

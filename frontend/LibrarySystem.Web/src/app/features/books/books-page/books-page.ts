@@ -1,5 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
@@ -20,6 +21,7 @@ import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
+import { LibraryRealtimeService } from '../../../core/realtime/library-realtime.service';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { BookCategoryOption, getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
@@ -86,7 +88,9 @@ export class BooksPageComponent implements OnInit {
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
   private readonly confirmationService = inject(ConfirmationService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly libraryRealtime = inject(LibraryRealtimeService);
   private readonly messageService = inject(MessageService);
   private readonly router = inject(Router);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
@@ -172,6 +176,11 @@ export class BooksPageComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    void this.libraryRealtime.start();
+    this.libraryRealtime.bookStockChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => this.updateBookStock(event.bookId, event.stock));
+
     this.loadBooks();
   }
 
@@ -562,6 +571,16 @@ export class BooksPageComponent implements OnInit {
 
   private loadCurrentPage(): void {
     this.loadBooks();
+  }
+
+  private updateBookStock(bookId: string, stock: number): void {
+    if (!this.books().some((book) => book.id === bookId)) {
+      return;
+    }
+
+    this.books.update((books) =>
+      books.map((book) => book.id === bookId ? { ...book, stock } : book)
+    );
   }
 
   private getSelectedSort(): Pick<BookSortOption, 'sortBy' | 'sortDirection'> {

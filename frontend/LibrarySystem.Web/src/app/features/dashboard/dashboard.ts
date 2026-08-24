@@ -1,4 +1,5 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { forkJoin, finalize } from 'rxjs';
 import { ButtonModule } from 'primeng/button';
@@ -14,6 +15,7 @@ import { BorrowingApiService } from '../borrowing/services/borrowing-api.service
 import { Book } from '../books/models/book.model';
 import { BooksApiService } from '../books/services/books-api.service';
 import { AuthStateService } from '../../core/auth/auth-state.service';
+import { LibraryRealtimeService } from '../../core/realtime/library-realtime.service';
 
 interface SummaryItem {
   label: string;
@@ -32,6 +34,8 @@ export class DashboardComponent implements OnInit {
   private readonly authState = inject(AuthStateService);
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly libraryRealtime = inject(LibraryRealtimeService);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
   private readonly dateFormatter = new Intl.DateTimeFormat('tr-TR', {
     day: '2-digit',
@@ -76,6 +80,11 @@ export class DashboardComponent implements OnInit {
   ]);
 
   ngOnInit(): void {
+    void this.libraryRealtime.start();
+    this.libraryRealtime.bookStockChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => this.updateBookStock(event.bookId, event.stock));
+
     this.loadDashboardData();
   }
 
@@ -161,5 +170,15 @@ export class DashboardComponent implements OnInit {
     const hash = Array.from(source).reduce((total, character) => total + character.charCodeAt(0), 0);
 
     return `cover--${this.coverTones[hash % this.coverTones.length]}`;
+  }
+
+  private updateBookStock(bookId: string, stock: number): void {
+    if (!this.books().some((book) => book.id === bookId)) {
+      return;
+    }
+
+    this.books.update((books) =>
+      books.map((book) => book.id === bookId ? { ...book, stock } : book)
+    );
   }
 }

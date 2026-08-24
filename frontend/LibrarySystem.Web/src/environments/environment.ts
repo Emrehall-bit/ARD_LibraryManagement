@@ -1,3 +1,6 @@
+const apiBaseUrl = 'http://localhost:5074';
+
 export const environment = {
-  apiBaseUrl: 'http://localhost:5074'
+  apiBaseUrl,
+  signalRHubUrl: `${apiBaseUrl}/hubs/library`
 };

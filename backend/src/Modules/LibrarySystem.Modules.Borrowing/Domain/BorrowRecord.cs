@@ -12,6 +12,17 @@ public sealed class BorrowRecord
     }
 
     public BorrowRecord(Guid id, string userId, Guid bookId, DateTime borrowedAt, DateTime dueDate)
+        : this(id, userId, bookId, borrowedAt, dueDate, renewalCount: 0)
+    {
+    }
+
+    public BorrowRecord(
+        Guid id,
+        string userId,
+        Guid bookId,
+        DateTime borrowedAt,
+        DateTime dueDate,
+        int renewalCount)
     {
         if (id == Guid.Empty)
         {
@@ -43,11 +54,17 @@ public sealed class BorrowRecord
             throw new ArgumentOutOfRangeException(nameof(dueDate), "Due date cannot be earlier than borrowed at.");
         }
 
+        if (renewalCount < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(renewalCount), "Renewal count cannot be negative.");
+        }
+
         Id = id;
         UserId = userId.Trim();
         BookId = bookId;
         BorrowedAt = borrowedAt;
         DueDate = dueDate;
+        RenewalCount = renewalCount;
         ReturnedAt = null;
     }
 
@@ -63,6 +80,8 @@ public sealed class BorrowRecord
 
     public DateTime? ReturnedAt { get; private set; }
 
+    public int RenewalCount { get; private set; }
+
     public BorrowStatus GetStatus(DateTime utcNow)
     {
         if (ReturnedAt is not null)
@@ -73,6 +92,27 @@ public sealed class BorrowRecord
         return DueDate < utcNow
             ? BorrowStatus.Overdue
             : BorrowStatus.Borrowed;
+    }
+
+    public void Renew(DateTime utcNow)
+    {
+        if (ReturnedAt is not null)
+        {
+            throw new InvalidOperationException("Returned borrow records cannot be renewed.");
+        }
+
+        if (GetStatus(utcNow) == BorrowStatus.Overdue)
+        {
+            throw new InvalidOperationException("Overdue borrow records cannot be renewed.");
+        }
+
+        if (RenewalCount >= BorrowingLoanPolicy.MaxRenewalCount)
+        {
+            throw new InvalidOperationException("The borrow record has already been renewed.");
+        }
+
+        DueDate = DueDate.AddDays(BorrowingLoanPolicy.RenewalPeriodDays);
+        RenewalCount++;
     }
 
     public void Return(DateTime returnedAt)

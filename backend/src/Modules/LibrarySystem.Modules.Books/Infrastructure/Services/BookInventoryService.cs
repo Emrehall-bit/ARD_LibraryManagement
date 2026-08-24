@@ -17,7 +17,7 @@ internal sealed class BookInventoryService(BooksDbContext dbContext) : IBookInve
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task DecreaseStockAsync(
+    public async Task<int> DecreaseStockAsync(
         Guid bookId,
         CancellationToken cancellationToken = default)
     {
@@ -31,9 +31,11 @@ internal sealed class BookInventoryService(BooksDbContext dbContext) : IBookInve
         book.DecreaseStock();
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        return book.Stock;
     }
 
-    public async Task IncreaseStockAsync(
+    public async Task<int> IncreaseStockAsync(
         Guid bookId,
         CancellationToken cancellationToken = default)
     {
@@ -42,6 +44,8 @@ internal sealed class BookInventoryService(BooksDbContext dbContext) : IBookInve
         book.IncreaseStock();
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        return book.Stock;
     }
 
     private async Task<Domain.Book> GetBookOrThrowAsync(Guid bookId, CancellationToken cancellationToken)

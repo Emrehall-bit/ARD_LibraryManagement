@@ -12,6 +12,10 @@ public interface IBorrowingService
         Guid bookId,
         CancellationToken cancellationToken = default);
 
+    Task<BorrowRecordResponseDto> RenewBookAsync(
+        Guid bookId,
+        CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<BorrowRecordResponseDto>> GetMyBooksAsync(
         CancellationToken cancellationToken = default);
 

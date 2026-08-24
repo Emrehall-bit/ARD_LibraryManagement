@@ -2,6 +2,7 @@ using System.Net;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
 using LibrarySystem.Modules.Books.Domain;
 using LibrarySystem.Modules.Books.Infrastructure;
+using LibrarySystem.Modules.Borrowing.Domain;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,6 +91,40 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
         Assert.Equal(initialStock, state.FinalStock + state.ActiveBorrowCount);
     }
 
+    [Fact]
+    public async Task RenewBook_ConcurrentRequests_SameBorrowRecord_AllowsOnlyOneRenewal()
+    {
+        var bookId = await SeedBookAsync(stock: 2);
+        var borrowedAt = CreateRecentBorrowedAt();
+        var originalDueDate = borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays);
+
+        await SeedBorrowRecordAsync(
+            "renew-concurrent-user",
+            bookId,
+            borrowedAt,
+            originalDueDate);
+
+        using var firstClient = CreateAuthenticatedClient("renew-concurrent-user");
+        using var secondClient = CreateAuthenticatedClient("renew-concurrent-user");
+
+        var responses = await PostRenewConcurrentlyAsync(bookId, firstClient, secondClient);
+
+        var successfulResponses = responses.Count(response => response.IsSuccessStatusCode);
+        var failedResponses = responses.Count(response => !response.IsSuccessStatusCode);
+
+        Assert.Equal(1, successfulResponses);
+        Assert.Equal(1, failedResponses);
+        Assert.All(
+            responses.Where(response => !response.IsSuccessStatusCode),
+            response => Assert.Contains(response.StatusCode, ExpectedConcurrencyFailureStatusCodes));
+        Assert.DoesNotContain(responses, response => response.StatusCode == HttpStatusCode.InternalServerError);
+
+        var state = await GetRenewalStateAsync(bookId);
+
+        Assert.Equal(1, state.RenewalCount);
+        Assert.Equal(originalDueDate.AddDays(BorrowingLoanPolicy.RenewalPeriodDays), state.DueDate);
+    }
+
     private HttpClient CreateAuthenticatedClient(string userId)
     {
         var client = factory.CreateUnauthenticatedApiClient();
@@ -112,6 +147,26 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
                 await start.Task;
 
                 return await client.PostAsync($"/api/borrow/{bookId}", content: null);
+            }))
+            .ToArray();
+
+        start.SetResult();
+
+        return await Task.WhenAll(tasks);
+    }
+
+    private static async Task<IReadOnlyList<HttpResponseMessage>> PostRenewConcurrentlyAsync(
+        Guid bookId,
+        params HttpClient[] clients)
+    {
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        var tasks = clients
+            .Select(client => Task.Run(async () =>
+            {
+                await start.Task;
+
+                return await client.PostAsync($"/api/borrow/renew/{bookId}", content: null);
             }))
             .ToArray();
 
@@ -156,6 +211,34 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
         return book.Id;
     }
 
+    private static DateTime CreateRecentBorrowedAt()
+    {
+        var utcNow = DateTime.UtcNow;
+
+        return new DateTime(
+            utcNow.Year,
+            utcNow.Month,
+            utcNow.Day,
+            utcNow.Hour,
+            utcNow.Minute,
+            0,
+            DateTimeKind.Utc).AddDays(-1);
+    }
+
+    private async Task SeedBorrowRecordAsync(
+        string userId,
+        Guid bookId,
+        DateTime borrowedAt,
+        DateTime dueDate)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, borrowedAt, dueDate);
+
+        await dbContext.BorrowRecords.AddAsync(borrowRecord);
+        await dbContext.SaveChangesAsync();
+    }
+
     private string GetConnectionString()
     {
         using var scope = factory.Services.CreateScope();
@@ -188,8 +271,24 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
         return new BorrowingState(finalStock, totalBorrowCount, activeBorrowCount);
     }
 
+    private async Task<RenewalState> GetRenewalStateAsync(Guid bookId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+
+        return await borrowingDbContext.BorrowRecords
+            .AsNoTracking()
+            .Where(borrowRecord => borrowRecord.BookId == bookId)
+            .Select(borrowRecord => new RenewalState(borrowRecord.DueDate, borrowRecord.RenewalCount))
+            .SingleAsync();
+    }
+
     private sealed record BorrowingState(
         int FinalStock,
         int TotalBorrowCount,
         int ActiveBorrowCount);
+
+    private sealed record RenewalState(
+        DateTime DueDate,
+        int RenewalCount);
 }

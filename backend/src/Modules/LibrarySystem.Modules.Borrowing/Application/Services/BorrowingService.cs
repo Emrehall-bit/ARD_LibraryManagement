@@ -4,6 +4,7 @@ using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Domain;
 using LibrarySystem.Shared.Authentication;
 using LibrarySystem.Shared.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace LibrarySystem.Modules.Borrowing.Application.Services;
 
@@ -13,7 +14,9 @@ internal sealed class BorrowingService(
     IBookLookupService bookLookupService,
     ICurrentUser currentUser,
     IBorrowingClock clock,
-    IBorrowingTransactionCoordinator transactionCoordinator) : IBorrowingService
+    IBorrowingTransactionCoordinator transactionCoordinator,
+    IBookStockChangeNotifier bookStockChangeNotifier,
+    ILogger<BorrowingService> logger) : IBorrowingService
 {
     public async Task<BorrowRecordResponseDto> BorrowBookAsync(
         Guid bookId,
@@ -21,7 +24,7 @@ internal sealed class BorrowingService(
     {
         var userId = GetCurrentUserId();
 
-        return await transactionCoordinator.ExecuteAsync(async transactionCancellationToken =>
+        var result = await transactionCoordinator.ExecuteAsync(async transactionCancellationToken =>
         {
             var bookInventory = await bookInventoryService.GetInventoryAsync(bookId, transactionCancellationToken);
             if (bookInventory is null)
@@ -42,7 +45,7 @@ internal sealed class BorrowingService(
                 throw new BusinessException($"Book with id '{bookId}' is already borrowed by the current user.");
             }
 
-            await bookInventoryService.DecreaseStockAsync(bookId, transactionCancellationToken);
+            var stock = await bookInventoryService.DecreaseStockAsync(bookId, transactionCancellationToken);
 
             var borrowedAt = clock.UtcNow;
             var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, borrowedAt);
@@ -50,8 +53,12 @@ internal sealed class BorrowingService(
             await borrowRepository.AddAsync(borrowRecord, transactionCancellationToken);
             await borrowRepository.SaveChangesAsync(transactionCancellationToken);
 
-            return MapToResponseDto(borrowRecord, clock.UtcNow);
+            return new BorrowingStockChangeResult(MapToResponseDto(borrowRecord, clock.UtcNow), bookId, stock);
         }, cancellationToken);
+
+        await NotifyStockChangedAsync(result.BookId, result.Stock, cancellationToken);
+
+        return result.BorrowRecord;
     }
 
     public async Task<BorrowRecordResponseDto> ReturnBookAsync(
@@ -60,7 +67,7 @@ internal sealed class BorrowingService(
     {
         var userId = GetCurrentUserId();
 
-        return await transactionCoordinator.ExecuteAsync(async transactionCancellationToken =>
+        var result = await transactionCoordinator.ExecuteAsync(async transactionCancellationToken =>
         {
             var borrowRecord = await borrowRepository.GetActiveByUserIdAndBookIdAsync(
                 userId,
@@ -74,11 +81,48 @@ internal sealed class BorrowingService(
 
             borrowRecord.Return(clock.UtcNow);
             await borrowRepository.UpdateAsync(borrowRecord, transactionCancellationToken);
-            await bookInventoryService.IncreaseStockAsync(bookId, transactionCancellationToken);
+            var stock = await bookInventoryService.IncreaseStockAsync(bookId, transactionCancellationToken);
             await borrowRepository.SaveChangesAsync(transactionCancellationToken);
 
-            return MapToResponseDto(borrowRecord, clock.UtcNow);
+            return new BorrowingStockChangeResult(MapToResponseDto(borrowRecord, clock.UtcNow), bookId, stock);
         }, cancellationToken);
+
+        await NotifyStockChangedAsync(result.BookId, result.Stock, cancellationToken);
+
+        return result.BorrowRecord;
+    }
+
+    public async Task<BorrowRecordResponseDto> RenewBookAsync(
+        Guid bookId,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        var borrowRecord = await borrowRepository.GetActiveByUserIdAndBookIdAsync(
+            userId,
+            bookId,
+            cancellationToken);
+
+        if (borrowRecord is null)
+        {
+            throw new NotFoundException($"Active borrow record for book id '{bookId}' was not found.");
+        }
+
+        var utcNow = clock.UtcNow;
+        if (borrowRecord.GetStatus(utcNow) == BorrowStatus.Overdue)
+        {
+            throw new BusinessException("Overdue borrow records cannot be renewed.");
+        }
+
+        if (borrowRecord.RenewalCount >= BorrowingLoanPolicy.MaxRenewalCount)
+        {
+            throw new BusinessException("The borrow record has already been renewed.");
+        }
+
+        borrowRecord.Renew(utcNow);
+        await borrowRepository.UpdateAsync(borrowRecord, cancellationToken);
+        await borrowRepository.SaveChangesAsync(cancellationToken);
+
+        return MapToResponseDto(borrowRecord, clock.UtcNow);
     }
 
     public async Task<IReadOnlyList<BorrowRecordResponseDto>> GetMyBooksAsync(
@@ -123,6 +167,24 @@ internal sealed class BorrowingService(
         return currentUser.UserId;
     }
 
+    private async Task NotifyStockChangedAsync(
+        Guid bookId,
+        int stock,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await bookStockChangeNotifier.NotifyAsync(bookId, stock, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Book stock change notification failed for book {BookId}.",
+                bookId);
+        }
+    }
+
     private IReadOnlyList<BorrowRecordResponseDto> MapToResponseDtos(
         IReadOnlyList<BorrowRecord> borrowRecords,
         IReadOnlyDictionary<Guid, BookLookupItem> booksById)
@@ -155,6 +217,12 @@ internal sealed class BorrowingService(
             borrowRecord.BorrowedAt,
             borrowRecord.DueDate,
             borrowRecord.ReturnedAt,
-            borrowRecord.GetStatus(utcNow).ToString());
+            borrowRecord.GetStatus(utcNow).ToString(),
+            borrowRecord.RenewalCount);
     }
+
+    private sealed record BorrowingStockChangeResult(
+        BorrowRecordResponseDto BorrowRecord,
+        Guid BookId,
+        int Stock);
 }

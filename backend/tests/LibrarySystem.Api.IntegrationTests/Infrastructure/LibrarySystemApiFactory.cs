@@ -1,5 +1,6 @@
 using System.Text.Json;
 using LibrarySystem.Modules.Books.Infrastructure;
+using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
@@ -23,6 +24,8 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
     public const string TestJwtKey = "library-system-tests-jwt-key-32-chars";
 
     private readonly string connectionString = CreateTestConnectionString();
+
+    public TestBookStockChangeNotifier BookStockChangeNotifications { get; } = new();
 
     public LibrarySystemApiFactory()
     {
@@ -77,6 +80,8 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
 
     public async Task ResetDataAsync()
     {
+        BookStockChangeNotifications.Reset();
+
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
 
@@ -120,6 +125,7 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
             services.RemoveAll<BorrowingDbContext>();
             services.RemoveAll<DbContextOptions<IdentityDbContext>>();
             services.RemoveAll<IdentityDbContext>();
+            services.RemoveAll<IBookStockChangeNotifier>();
 
             services.AddDbContext<BooksDbContext>(options =>
                 options.UseNpgsql(connectionString, npgsqlOptions =>
@@ -141,6 +147,8 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
                     npgsqlOptions.MigrationsAssembly(typeof(IdentityDbContext).Assembly.FullName);
                     npgsqlOptions.MigrationsHistoryTable("__EFMigrationsHistory", "identity");
                 }));
+
+            services.AddSingleton<IBookStockChangeNotifier>(BookStockChangeNotifications);
 
             services
                 .AddAuthentication(options =>

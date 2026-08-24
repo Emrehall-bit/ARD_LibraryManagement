@@ -1,6 +1,8 @@
 using LibrarySystem.Api.ExceptionHandling;
+using LibrarySystem.Api.Hubs;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Books.Infrastructure.Seeding;
+using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure.AdminBootstrap;
@@ -14,6 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi(options =>
 {
@@ -67,7 +70,7 @@ builder.Services.AddCors(options =>
         policy
             .WithOrigins(allowedOrigins)
             .WithMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-            .WithHeaders("Authorization", "Content-Type");
+            .WithHeaders("Authorization", "Content-Type", "X-Requested-With");
     });
 });
 
@@ -77,6 +80,7 @@ var databaseConnectionString = builder.Configuration.GetConnectionString("Librar
 builder.Services.AddBooksInfrastructure(databaseConnectionString);
 builder.Services.AddBorrowingInfrastructure(databaseConnectionString);
 builder.Services.AddIdentityInfrastructure(databaseConnectionString, builder.Configuration);
+builder.Services.AddScoped<IBookStockChangeNotifier, SignalRBookStockChangeNotifier>();
 
 var app = builder.Build();
 
@@ -100,6 +104,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<LibraryHub>("/hubs/library");
 
 app.Run();
 

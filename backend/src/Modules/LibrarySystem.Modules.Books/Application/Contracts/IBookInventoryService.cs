@@ -6,11 +6,11 @@ public interface IBookInventoryService
         Guid bookId,
         CancellationToken cancellationToken = default);
 
-    Task DecreaseStockAsync(
+    Task<int> DecreaseStockAsync(
         Guid bookId,
         CancellationToken cancellationToken = default);
 
-    Task IncreaseStockAsync(
+    Task<int> IncreaseStockAsync(
         Guid bookId,
         CancellationToken cancellationToken = default);
 }

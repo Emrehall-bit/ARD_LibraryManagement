@@ -12,6 +12,7 @@ import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
 
 import { AuthStateService } from '../../../core/auth/auth-state.service';
+import { LibraryRealtimeService } from '../../../core/realtime/library-realtime.service';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
@@ -39,6 +40,7 @@ export class BookDetailPageComponent implements OnInit {
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly libraryRealtime = inject(LibraryRealtimeService);
   private readonly messageService = inject(MessageService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -51,6 +53,11 @@ export class BookDetailPageComponent implements OnInit {
   protected readonly isAuthenticated = this.authState.isAuthenticated;
 
   ngOnInit(): void {
+    void this.libraryRealtime.start();
+    this.libraryRealtime.bookStockChanged$
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((event) => this.updateBookStock(event.bookId, event.stock));
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -154,6 +161,10 @@ export class BookDetailPageComponent implements OnInit {
           this.errorMessage.set(this.getLoadErrorMessage(error));
         }
       });
+  }
+
+  private updateBookStock(bookId: string, stock: number): void {
+    this.book.update((book) => book?.id === bookId ? { ...book, stock } : book);
   }
 
   private getLoadErrorMessage(error: unknown): string {
