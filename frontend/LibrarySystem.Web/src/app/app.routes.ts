@@ -2,7 +2,6 @@ import { Routes } from '@angular/router';
 
 import { adminGuard } from './core/guards/admin.guard';
 import { authGuard } from './core/guards/auth.guard';
-import { AppLayoutComponent } from './layout/app-layout/app-layout';
 
 export const routes: Routes = [
   {
@@ -15,7 +14,7 @@ export const routes: Routes = [
   },
   {
     path: '',
-    component: AppLayoutComponent,
+    loadComponent: () => import('./layout/app-layout/app-layout').then((component) => component.AppLayoutComponent),
     children: [
       {
         path: '',

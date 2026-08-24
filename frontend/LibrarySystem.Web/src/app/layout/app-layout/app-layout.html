@@ -11,12 +11,20 @@
     </main>
   </div>
 
-  <p-drawer
-    [(visible)]="sidebarVisible"
-    styleClass="app-mobile-drawer"
-    position="left"
-    [showCloseIcon]="false"
+  <button
+    type="button"
+    class="app-shell__mobile-backdrop"
+    [class.app-shell__mobile-backdrop--visible]="sidebarVisible"
+    aria-label="Menüyü kapat"
+    (click)="closeSidebar()"
+  ></button>
+
+  <aside
+    class="app-shell__mobile-sidebar"
+    [class.app-shell__mobile-sidebar--visible]="sidebarVisible"
+    aria-label="Mobil navigasyon"
+    (click)="closeSidebar()"
   >
     <app-sidebar />
-  </p-drawer>
+  </aside>
 </div>

@@ -1,14 +1,12 @@
 import { Component, computed, inject, output } from '@angular/core';
 import { Router } from '@angular/router';
-import { ButtonModule } from 'primeng/button';
-import { TagModule } from 'primeng/tag';
 
 import { AuthStateService } from '../../core/auth/auth-state.service';
 import { AUTH_ROLES } from '../../core/auth/auth-roles';
 
 @Component({
   selector: 'app-topbar',
-  imports: [ButtonModule, TagModule],
+  imports: [],
   templateUrl: './topbar.html',
   styleUrl: './topbar.scss'
 })
