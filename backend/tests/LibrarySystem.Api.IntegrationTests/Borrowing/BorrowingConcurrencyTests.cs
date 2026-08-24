@@ -92,6 +92,47 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
     }
 
     [Fact]
+    public async Task BorrowBook_ConcurrentRequests_SameUserAtTwoActiveBorrows_DoesNotExceedActiveLimit()
+    {
+        const string userId = "active-limit-concurrent-user";
+        var firstTargetBookId = await SeedBookAsync(stock: 2);
+        var secondTargetBookId = await SeedBookAsync(stock: 2);
+        await SeedActiveBorrowRecordsAsync(userId, activeBorrowCount: 2);
+
+        using var firstClient = CreateAuthenticatedClient(userId);
+        using var secondClient = CreateAuthenticatedClient(userId);
+
+        var responses = await PostBorrowConcurrentlyWhileBookRowsAreLockedAsync(
+            [firstTargetBookId, secondTargetBookId],
+            (firstTargetBookId, firstClient),
+            (secondTargetBookId, secondClient));
+
+        var successfulResponses = responses.Count(response => response.IsSuccessStatusCode);
+        var failedResponses = responses.Count(response => !response.IsSuccessStatusCode);
+
+        Assert.Equal(1, successfulResponses);
+        Assert.Equal(1, failedResponses);
+        Assert.All(
+            responses.Where(response => !response.IsSuccessStatusCode),
+            response => Assert.Contains(response.StatusCode, ExpectedConcurrencyFailureStatusCodes));
+        Assert.DoesNotContain(responses, response => response.StatusCode == HttpStatusCode.InternalServerError);
+
+        using var scope = factory.Services.CreateScope();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var activeBorrowCount = await borrowingDbContext.BorrowRecords
+            .AsNoTracking()
+            .CountAsync(borrowRecord => borrowRecord.UserId == userId && borrowRecord.ReturnedAt == null);
+        var targetBorrowCount = await borrowingDbContext.BorrowRecords
+            .AsNoTracking()
+            .CountAsync(borrowRecord =>
+                borrowRecord.BookId == firstTargetBookId ||
+                borrowRecord.BookId == secondTargetBookId);
+
+        Assert.Equal(BorrowingLoanPolicy.MaxActiveBorrowCount, activeBorrowCount);
+        Assert.Equal(1, targetBorrowCount);
+    }
+
+    [Fact]
     public async Task RenewBook_ConcurrentRequests_SameBorrowRecord_AllowsOnlyOneRenewal()
     {
         var bookId = await SeedBookAsync(stock: 2);
@@ -179,6 +220,15 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
         Guid bookId,
         params HttpClient[] clients)
     {
+        return await PostBorrowConcurrentlyWhileBookRowsAreLockedAsync(
+            [bookId],
+            clients.Select(client => (bookId, client)).ToArray());
+    }
+
+    private async Task<IReadOnlyList<HttpResponseMessage>> PostBorrowConcurrentlyWhileBookRowsAreLockedAsync(
+        IReadOnlyCollection<Guid> lockedBookIds,
+        params (Guid BookId, HttpClient Client)[] requests)
+    {
         await using var connection = new NpgsqlConnection(GetConnectionString());
         await connection.OpenAsync();
 
@@ -186,17 +236,27 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
         await using var command = connection.CreateCommand();
 
         command.Transaction = transaction;
-        command.CommandText = "SELECT id FROM books.books WHERE id = @bookId FOR UPDATE;";
-        command.Parameters.AddWithValue("bookId", bookId);
+        command.CommandText = "SELECT id FROM books.books WHERE id = ANY(@bookIds) FOR UPDATE;";
+        command.Parameters.AddWithValue("bookIds", lockedBookIds.ToArray());
 
         await command.ExecuteNonQueryAsync();
 
-        var responsesTask = PostBorrowConcurrentlyAsync(bookId, clients);
+        var start = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var tasks = requests
+            .Select(request => Task.Run(async () =>
+            {
+                await start.Task;
+
+                return await request.Client.PostAsync($"/api/borrow/{request.BookId}", content: null);
+            }))
+            .ToArray();
+
+        start.SetResult();
 
         await Task.Delay(TimeSpan.FromMilliseconds(500));
         await transaction.CommitAsync();
 
-        return await responsesTask;
+        return await Task.WhenAll(tasks);
     }
 
     private async Task<Guid> SeedBookAsync(int stock)
@@ -237,6 +297,21 @@ public sealed class BorrowingConcurrencyTests(LibrarySystemApiFactory factory) :
 
         await dbContext.BorrowRecords.AddAsync(borrowRecord);
         await dbContext.SaveChangesAsync();
+    }
+
+    private async Task SeedActiveBorrowRecordsAsync(string userId, int activeBorrowCount)
+    {
+        for (var index = 0; index < activeBorrowCount; index++)
+        {
+            var bookId = await SeedBookAsync(stock: 2);
+            var borrowedAt = DateTime.UtcNow.AddMinutes(-5 - index);
+
+            await SeedBorrowRecordAsync(
+                userId,
+                bookId,
+                borrowedAt,
+                borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays));
+        }
     }
 
     private string GetConnectionString()

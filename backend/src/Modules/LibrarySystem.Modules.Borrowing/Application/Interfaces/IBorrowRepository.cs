@@ -23,6 +23,14 @@ public interface IBorrowRepository
         DateTime utcNow,
         CancellationToken cancellationToken = default);
 
+    Task AcquireActiveBorrowLimitLockAsync(
+        string userId,
+        CancellationToken cancellationToken = default);
+
+    Task<int> CountActiveByUserIdAsync(
+        string userId,
+        CancellationToken cancellationToken = default);
+
     Task<BorrowRecordPage> GetOverduePageAsync(
         int page,
         int pageSize,

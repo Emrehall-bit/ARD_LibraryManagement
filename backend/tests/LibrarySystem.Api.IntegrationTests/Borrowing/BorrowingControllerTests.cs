@@ -184,6 +184,140 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Equal(1, nextBookStock);
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task BorrowBook_WithActiveBorrowCountBelowLimit_ReturnsSuccess(int activeBorrowCount)
+    {
+        const string userId = "active-limit-below-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, userId);
+        await SeedActiveBorrowRecordsAsync(userId, activeBorrowCount);
+        var nextBookId = await SeedBookAsync(name: $"Limit Allowed Book {activeBorrowCount}", stock: 2);
+
+        var response = await client.PostAsync($"/api/borrow/{nextBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var activeCount = await borrowingDbContext.BorrowRecords
+            .CountAsync(borrowRecord => borrowRecord.UserId == userId && borrowRecord.ReturnedAt == null);
+
+        Assert.Equal(activeBorrowCount + 1, activeCount);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithTwoActiveBorrows_AllowsThirdBorrow()
+    {
+        const string userId = "active-limit-third-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, userId);
+        await SeedActiveBorrowRecordsAsync(userId, activeBorrowCount: 2);
+        var thirdBookId = await SeedBookAsync(name: "Allowed Third Active Book", stock: 2);
+
+        var response = await client.PostAsync($"/api/borrow/{thirdBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var activeCount = await borrowingDbContext.BorrowRecords
+            .CountAsync(borrowRecord => borrowRecord.UserId == userId && borrowRecord.ReturnedAt == null);
+
+        Assert.Equal(BorrowingLoanPolicy.MaxActiveBorrowCount, activeCount);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithActiveBorrowLimitReached_ReturnsBadRequestWithoutSideEffects()
+    {
+        const string userId = "active-limit-full-user";
+        const int targetBookStock = 4;
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, userId);
+        await SeedActiveBorrowRecordsAsync(userId, BorrowingLoanPolicy.MaxActiveBorrowCount);
+        var targetBookId = await SeedBookAsync(name: "Blocked Fourth Active Book", stock: targetBookStock);
+
+        var response = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        var problemDetails = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
+
+        Assert.Equal("Business rule violation.", problemDetails?.Title);
+        Assert.Equal("User has reached the maximum active borrow limit.", problemDetails?.Detail);
+
+        using var scope = factory.Services.CreateScope();
+        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+        var targetBookFinalStock = await booksDbContext.Books
+            .Where(book => book.Id == targetBookId)
+            .Select(book => book.Stock)
+            .SingleAsync();
+        var targetBorrowCount = await borrowingDbContext.BorrowRecords
+            .CountAsync(borrowRecord => borrowRecord.BookId == targetBookId);
+        var userActiveCount = await borrowingDbContext.BorrowRecords
+            .CountAsync(borrowRecord => borrowRecord.UserId == userId && borrowRecord.ReturnedAt == null);
+
+        Assert.Equal(targetBookStock, targetBookFinalStock);
+        Assert.Equal(0, targetBorrowCount);
+        Assert.Equal(BorrowingLoanPolicy.MaxActiveBorrowCount, userActiveCount);
+        Assert.Empty(factory.BookStockChangeNotifications.Notifications);
+    }
+
+    [Fact]
+    public async Task BorrowBook_AfterReturningOneOfThreeActiveBorrows_ReturnsSuccess()
+    {
+        const string userId = "active-limit-return-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, userId);
+        var returnedBookId = await SeedBookAsync(name: "Limit Returned Book", stock: 1);
+        await SeedActiveBorrowRecordsAsync(userId, activeBorrowCount: 2);
+        await SeedBorrowRecordAsync(userId, returnedBookId);
+        var targetBookId = await SeedBookAsync(name: "Limit Borrow After Return", stock: 2);
+
+        var returnResponse = await client.PostAsync($"/api/return/{returnedBookId}", content: null);
+        var response = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, returnResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithOverdueActiveBorrowsStillUsesOverdueRestriction()
+    {
+        const string userId = "active-limit-overdue-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, userId);
+        var overdueBookId = await SeedBookAsync(name: "Limit Overdue Book", stock: 2);
+        var targetBookId = await SeedBookAsync(name: "Limit Overdue Target", stock: 2);
+        var dueDate = DateTime.UtcNow.Date.AddDays(-1);
+
+        await SeedBorrowRecordAsync(
+            userId,
+            overdueBookId,
+            borrowedAt: dueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: dueDate);
+
+        var response = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var problemDetails = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
+
+        Assert.Equal("User has overdue borrowed books.", problemDetails?.Detail);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithAnotherUserAtActiveBorrowLimit_ReturnsSuccess()
+    {
+        const string currentUserId = "active-limit-current-user";
+        const string otherUserId = "active-limit-other-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, currentUserId);
+        await SeedActiveBorrowRecordsAsync(otherUserId, BorrowingLoanPolicy.MaxActiveBorrowCount);
+        var targetBookId = await SeedBookAsync(name: "Other User Limit Does Not Block", stock: 2);
+
+        var response = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     [Fact]
     public async Task BorrowBook_WithOverdueBorrow_ReturnsBadRequestWithoutChangingStockOrPublishingNotification()
     {
@@ -678,6 +812,26 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     }
 
     [Fact]
+    public async Task RenewBook_WithActiveBorrowLimitReached_ReturnsSuccess()
+    {
+        const string userId = "renew-active-limit-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, userId);
+        var renewalBookId = await SeedBookAsync(name: "Renew With Active Limit", stock: 2);
+
+        await SeedBorrowRecordAsync(userId, renewalBookId);
+        await SeedActiveBorrowRecordsAsync(userId, activeBorrowCount: BorrowingLoanPolicy.MaxActiveBorrowCount - 1);
+
+        var response = await client.PostAsync($"/api/borrow/renew/{renewalBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecord = await response.Content.ReadFromJsonAsync<BorrowRecordResponse>();
+
+        Assert.NotNull(borrowRecord);
+        Assert.Equal(1, borrowRecord.RenewalCount);
+    }
+
+    [Fact]
     public async Task BorrowEndpoints_WithoutAuthentication_ReturnUnauthorized()
     {
         using var client = factory.CreateUnauthenticatedApiClient();
@@ -1031,6 +1185,16 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
             EmailConfirmed = true
         });
         await dbContext.SaveChangesAsync();
+    }
+
+    private async Task SeedActiveBorrowRecordsAsync(string userId, int activeBorrowCount)
+    {
+        for (var index = 0; index < activeBorrowCount; index++)
+        {
+            var bookId = await SeedBookAsync(name: $"Active Limit Seed Book {userId} {index}", stock: 2);
+
+            await SeedBorrowRecordAsync(userId, bookId);
+        }
     }
 
     private static DateTime CreateRecentBorrowedAt()

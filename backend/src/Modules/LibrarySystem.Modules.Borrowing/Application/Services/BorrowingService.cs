@@ -27,15 +27,34 @@ internal sealed class BorrowingService(
         CancellationToken cancellationToken = default)
     {
         var userId = GetCurrentUserId();
-        var utcNow = clock.UtcNow;
-
-        if (await borrowRepository.HasOverdueBorrowsAsync(userId, utcNow, cancellationToken))
-        {
-            throw new BusinessException("User has overdue borrowed books.");
-        }
 
         var result = await transactionCoordinator.ExecuteAsync(async transactionCancellationToken =>
         {
+            var utcNow = clock.UtcNow;
+
+            await borrowRepository.AcquireActiveBorrowLimitLockAsync(userId, transactionCancellationToken);
+
+            if (await borrowRepository.HasOverdueBorrowsAsync(userId, utcNow, transactionCancellationToken))
+            {
+                throw new BusinessException("User has overdue borrowed books.");
+            }
+
+            var activeBorrowCount = await borrowRepository.CountActiveByUserIdAsync(
+                userId,
+                transactionCancellationToken);
+            if (activeBorrowCount >= BorrowingLoanPolicy.MaxActiveBorrowCount)
+            {
+                throw new BusinessException("User has reached the maximum active borrow limit.");
+            }
+
+            if (await borrowRepository.GetActiveByUserIdAndBookIdAsync(
+                    userId,
+                    bookId,
+                    transactionCancellationToken) is not null)
+            {
+                throw new BusinessException($"Book with id '{bookId}' is already borrowed by the current user.");
+            }
+
             var bookInventory = await bookInventoryService.GetInventoryAsync(bookId, transactionCancellationToken);
             if (bookInventory is null)
             {
@@ -45,14 +64,6 @@ internal sealed class BorrowingService(
             if (bookInventory.Stock <= 0)
             {
                 throw new BusinessException($"Book with id '{bookId}' is out of stock.");
-            }
-
-            if (await borrowRepository.GetActiveByUserIdAndBookIdAsync(
-                    userId,
-                    bookId,
-                    transactionCancellationToken) is not null)
-            {
-                throw new BusinessException($"Book with id '{bookId}' is already borrowed by the current user.");
             }
 
             var stock = await bookInventoryService.DecreaseStockAsync(bookId, transactionCancellationToken);

@@ -63,6 +63,30 @@ internal sealed class BorrowRepository(BorrowingDbContext dbContext) : IBorrowRe
                 cancellationToken);
     }
 
+    public async Task AcquireActiveBorrowLimitLockAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        var lockKey = $"library-system:borrowing:active-limit:{userId}";
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync(
+            $"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0));",
+            cancellationToken);
+    }
+
+    public async Task<int> CountActiveByUserIdAsync(
+        string userId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.BorrowRecords
+            .AsNoTracking()
+            .CountAsync(
+                borrowRecord =>
+                    borrowRecord.UserId == userId &&
+                    borrowRecord.ReturnedAt == null,
+                cancellationToken);
+    }
+
     public async Task<BorrowRecordPage> GetOverduePageAsync(
         int page,
         int pageSize,

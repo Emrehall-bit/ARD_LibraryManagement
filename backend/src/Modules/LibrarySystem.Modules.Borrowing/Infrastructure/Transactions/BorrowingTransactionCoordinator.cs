@@ -31,7 +31,7 @@ internal sealed class BorrowingTransactionCoordinator(
             borrowingDbContext.Database.SetDbConnection(connection, contextOwnsConnection: false);
 
             await using var transaction = await booksDbContext.Database.BeginTransactionAsync(
-                IsolationLevel.RepeatableRead,
+                IsolationLevel.Serializable,
                 cancellationToken);
 
             await borrowingDbContext.Database.UseTransactionAsync(
@@ -48,12 +48,21 @@ internal sealed class BorrowingTransactionCoordinator(
             }
             catch (Exception exception)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                try
+                {
+                    await transaction.RollbackAsync(cancellationToken);
+                }
+                catch (Exception rollbackException) when (IsPostgreSqlSerializationFailure(exception))
+                {
+                    throw new ConcurrencyConflictException(
+                        "The borrow operation could not be completed because the book inventory or active borrow count was changed concurrently.",
+                        new AggregateException(exception, rollbackException));
+                }
 
                 if (IsPostgreSqlSerializationFailure(exception))
                 {
                     throw new ConcurrencyConflictException(
-                        "The borrow operation could not be completed because the book inventory was changed concurrently.",
+                        "The borrow operation could not be completed because the book inventory or active borrow count was changed concurrently.",
                         exception);
                 }
 
