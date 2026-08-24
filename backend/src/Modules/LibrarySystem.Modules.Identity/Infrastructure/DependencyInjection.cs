@@ -80,9 +80,11 @@ public static class DependencyInjection
         services.AddAuthorization();
         services.AddHttpContextAccessor();
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAdminUserService, AdminUserService>();
         services.AddScoped<ITokenService, JwtTokenService>();
         services.AddScoped<IUserDirectory, UserDirectory>();
         services.AddScoped<ICurrentUser, CurrentUser>();
+        services.AddScoped<IValidator<GetAdminUsersQueryDto>, GetAdminUsersQueryValidator>();
         services.AddScoped<IValidator<RegisterRequestDto>, RegisterRequestValidator>();
         services.AddScoped<IValidator<LoginRequestDto>, LoginRequestValidator>();
 
