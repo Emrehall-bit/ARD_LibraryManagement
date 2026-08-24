@@ -1,12 +1,12 @@
 <section class="dashboard">
   <div class="dashboard__header grid align-items-center">
     <div class="col-12 lg:col-4">
-      <h1>Anasayfa</h1>
+      <h1 class="app-page-title">Anasayfa</h1>
     </div>
 
     <div class="col-12 lg:col-8">
       <div class="dashboard__search flex align-items-center justify-content-end gap-2">
-        <span class="dashboard__search-field">
+        <span class="dashboard__search-field app-search-field">
           <i class="pi pi-search"></i>
           <input pInputText type="search" placeholder="Kitap, yazar veya tür ara..." aria-label="Kitap ara" />
         </span>
@@ -16,7 +16,7 @@
   </div>
 
   @if (isLoading()) {
-    <div class="dashboard__state dashboard__state--loading flex flex-column align-items-center justify-content-center">
+    <div class="dashboard__state dashboard__state--loading app-page-state flex flex-column align-items-center justify-content-center">
       <p-progress-spinner ariaLabel="Dashboard verileri yükleniyor" />
       <span>Dashboard verileri yükleniyor...</span>
     </div>
@@ -27,13 +27,13 @@
   } @else {
     <div class="grid dashboard__grid">
       <div class="col-12 xl:col-8">
-        <p-card styleClass="dashboard-card dashboard-card--popular">
+        <p-card styleClass="dashboard-card dashboard-card--popular app-card-surface">
           <ng-template #title>
-            <span class="dashboard-card__title">Katalogdan Kitaplar</span>
+            <span class="dashboard-card__title app-card-title">Katalogdan Kitaplar</span>
           </ng-template>
           <ng-template #content>
             @if (catalogBooks().length === 0) {
-              <div class="dashboard-empty">
+              <div class="dashboard-empty app-page-state">
                 <i class="pi pi-book"></i>
                 <strong>Henüz kayıtlı kitap bulunmuyor.</strong>
               </div>
@@ -56,13 +56,13 @@
       </div>
 
       <div class="col-12 xl:col-4">
-        <p-card styleClass="dashboard-card dashboard-card--compact">
+        <p-card styleClass="dashboard-card dashboard-card--compact app-card-surface">
           <ng-template #title>
-            <span class="dashboard-card__title">Mevcut Ödünçler</span>
+            <span class="dashboard-card__title app-card-title">Mevcut Ödünçler</span>
           </ng-template>
           <ng-template #content>
             @if (recentBorrowedBooks().length === 0) {
-              <div class="dashboard-empty dashboard-empty--compact">
+              <div class="dashboard-empty dashboard-empty--compact app-page-state">
                 <i class="pi pi-bookmark"></i>
                 <strong>Aktif ödünç kitabınız bulunmuyor.</strong>
               </div>
@@ -85,16 +85,16 @@
       </div>
 
       <div class="col-12 xl:col-8">
-        <p-card styleClass="dashboard-card">
+        <p-card styleClass="dashboard-card app-card-surface">
           <ng-template #title>
-            <div class="dashboard-card__title-row flex align-items-center justify-content-between gap-2">
-              <span class="dashboard-card__title">Mevcut Ödünç Aldıklarım</span>
+            <div class="dashboard-card__title-row w-full flex align-items-center justify-content-between gap-2">
+              <span class="dashboard-card__title app-card-title">Mevcut Ödünç Aldıklarım</span>
               <p-button label="Tümünü Gör" icon="pi pi-arrow-right" size="small" [text]="true" routerLink="/my-books" />
             </div>
           </ng-template>
           <ng-template #content>
             @if (recentBorrowedBooks().length === 0) {
-              <div class="dashboard-empty">
+              <div class="dashboard-empty app-page-state">
                 <i class="pi pi-bookmark"></i>
                 <strong>Aktif ödünç kitabınız bulunmuyor.</strong>
               </div>
@@ -123,9 +123,9 @@
 
       <div class="col-12 xl:col-4">
         <div class="right-stack flex flex-column gap-3">
-          <p-card styleClass="dashboard-card dashboard-card--compact">
+          <p-card styleClass="dashboard-card dashboard-card--compact app-card-surface">
             <ng-template #title>
-              <span class="dashboard-card__title">Hızlı İşlemler</span>
+              <span class="dashboard-card__title app-card-title">Hızlı İşlemler</span>
             </ng-template>
             <ng-template #content>
               <div class="quick-actions flex flex-wrap gap-2">
@@ -142,9 +142,9 @@
             </ng-template>
           </p-card>
 
-          <p-card styleClass="dashboard-card dashboard-card--compact">
+          <p-card styleClass="dashboard-card dashboard-card--compact app-card-surface">
             <ng-template #title>
-              <span class="dashboard-card__title">Kütüphane İstatistikleri</span>
+              <span class="dashboard-card__title app-card-title">Kütüphane İstatistikleri</span>
             </ng-template>
             <ng-template #content>
               <div class="summary-grid grid">

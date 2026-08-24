@@ -1,41 +1,10 @@
-.dashboard {
-  color: var(--app-text);
-}
-
 .dashboard__header {
   margin-bottom: 0.75rem;
 }
 
-h1 {
-  margin: 0;
-  color: var(--app-primary-dark);
-  font-size: clamp(1.45rem, 2vw, 1.8rem);
-  line-height: 1.1;
-}
-
 .dashboard__search-field {
-  position: relative;
   flex: 1 1 18rem;
   max-width: 29rem;
-}
-
-.dashboard__search-field i {
-  position: absolute;
-  top: 50%;
-  left: 0.75rem;
-  color: var(--app-muted-text);
-  font-size: 0.85rem;
-  transform: translateY(-50%);
-}
-
-.dashboard__search-field input {
-  width: 100%;
-  min-height: 2.35rem;
-  padding-left: 2.25rem;
-  border-color: var(--app-border);
-  border-radius: 0.55rem;
-  background: rgba(255, 253, 248, 0.9);
-  font-size: 0.9rem;
 }
 
 .dashboard__grid {
@@ -45,21 +14,6 @@ h1 {
 .dashboard-card {
   display: block;
   height: 100%;
-  border: 1px solid rgba(226, 216, 199, 0.9);
-  border-radius: 0.75rem;
-  background: rgba(255, 253, 248, 0.96);
-  box-shadow: var(--app-shadow-soft);
-}
-
-.dashboard-card__title {
-  color: var(--app-primary-dark);
-  font-size: 0.95rem;
-  font-weight: 800;
-  line-height: 1.15;
-}
-
-.dashboard-card__title-row {
-  width: 100%;
 }
 
 .popular-books {
@@ -101,62 +55,32 @@ h1 {
 }
 
 .book-cover {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
   width: min(100%, 6.25rem);
-  aspect-ratio: 0.68;
   min-height: 0;
   margin-inline: auto;
   padding: 0.6rem;
-  overflow: hidden;
   border-radius: 0.55rem;
-  color: #ffffff;
   box-shadow: inset 8px 0 0 rgba(255, 255, 255, 0.13);
 }
 
 .book-cover::after,
 .mini-cover::after {
-  content: "";
-  position: absolute;
   inset: 0.35rem 0.35rem auto auto;
   width: 32%;
   height: 0.18rem;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.45);
 }
 
 .book-cover span {
-  position: relative;
-  z-index: 1;
   font-size: 0.72rem;
-  font-weight: 800;
   line-height: 1.1;
 }
 
 .mini-cover {
-  position: relative;
   flex: 0 0 2.35rem;
   width: 2.35rem;
   height: 3.35rem;
   border-radius: 0.4rem;
   box-shadow: inset 5px 0 0 rgba(255, 255, 255, 0.13);
-}
-
-.cover--navy {
-  background: linear-gradient(155deg, #0b2534, #16465b);
-}
-
-.cover--gold {
-  background: linear-gradient(155deg, #b88222, #d5aa4a);
-}
-
-.cover--teal {
-  background: linear-gradient(155deg, #0f4f4f, #168f86);
-}
-
-.cover--clay {
-  background: linear-gradient(155deg, #8a4d3b, #b97951);
 }
 
 .loan-list {
@@ -277,12 +201,6 @@ h1 {
 .dashboard__state,
 .dashboard-empty {
   min-height: 10rem;
-  padding: 1.5rem;
-  border: 1px dashed rgba(226, 216, 199, 0.95);
-  border-radius: 0.75rem;
-  background: rgba(255, 253, 248, 0.78);
-  color: var(--app-muted-text);
-  text-align: center;
 }
 
 .dashboard__state {
@@ -298,6 +216,7 @@ h1 {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  padding: 1.5rem;
 }
 
 .dashboard-empty--compact {
@@ -306,14 +225,11 @@ h1 {
 }
 
 .dashboard-empty i {
-  margin-bottom: 0.55rem;
-  color: var(--app-accent);
   font-size: 1.2rem;
 }
 
 .dashboard__state span,
 .dashboard-empty strong {
-  color: var(--app-muted-text);
   font-size: 0.88rem;
 }
 

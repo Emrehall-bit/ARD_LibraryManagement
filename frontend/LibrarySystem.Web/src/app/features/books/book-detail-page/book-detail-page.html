@@ -53,16 +53,14 @@
             </div>
 
             <div class="book-detail__actions">
-              @if (selectedBook.stock > 0) {
-                <p-button
-                  label="Ödünç Al"
-                  icon="pi pi-bookmark"
-                  [loading]="isBorrowing()"
-                  [disabled]="isBorrowing()"
-                  styleClass="book-detail__borrow-button"
-                  (onClick)="borrowBook()"
-                />
-              }
+              <p-button
+                [label]="getBorrowLabel(selectedBook.stock)"
+                [icon]="getBorrowIcon(selectedBook.stock)"
+                [loading]="isBorrowing()"
+                [disabled]="selectedBook.stock === 0 || isBorrowing()"
+                styleClass="book-detail__borrow-button"
+                (onClick)="borrowBook()"
+              />
             </div>
           </div>
         </article>

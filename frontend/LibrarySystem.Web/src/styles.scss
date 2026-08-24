@@ -5,9 +5,16 @@
   --app-accent-gold: #c79a35;
   --app-background: #f6f0e4;
   --app-surface: #fffdf8;
+  --app-surface-raised: rgba(255, 253, 248, 0.96);
+  --app-surface-muted: rgba(255, 253, 248, 0.78);
+  --app-control-surface: rgba(255, 253, 248, 0.9);
   --app-text: #17202a;
   --app-muted-text: #6f6b63;
   --app-border: #e2d8c7;
+  --app-border-soft: rgba(226, 216, 199, 0.9);
+  --app-border-dashed: rgba(226, 216, 199, 0.95);
+  --app-radius-card: 0.75rem;
+  --app-radius-control: 0.55rem;
   --app-sidebar-background: #fbf4e8;
   --app-sidebar-width: 248px;
   --app-topbar-height: 72px;
@@ -30,6 +37,133 @@ body {
   background: var(--app-background);
   color: var(--app-text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.app-page-title {
+  margin: 0;
+  color: var(--app-primary-dark);
+  font-size: clamp(1.45rem, 2vw, 1.8rem);
+  line-height: 1.1;
+}
+
+.app-page-subtitle {
+  margin: 0.4rem 0 0;
+  color: var(--app-muted-text);
+  font-size: 0.92rem;
+}
+
+.app-card-surface {
+  border: 1px solid var(--app-border-soft);
+  border-radius: var(--app-radius-card);
+  background: var(--app-surface-raised);
+  box-shadow: var(--app-shadow-soft);
+}
+
+.app-card-title {
+  color: var(--app-primary-dark);
+  font-size: 0.95rem;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.app-search-field {
+  position: relative;
+}
+
+.app-search-field i {
+  position: absolute;
+  top: 50%;
+  left: 0.75rem;
+  color: var(--app-muted-text);
+  font-size: 0.85rem;
+  transform: translateY(-50%);
+}
+
+.app-search-field input {
+  width: 100%;
+  min-height: 2.35rem;
+  padding-left: 2.25rem;
+  border-color: var(--app-border);
+  border-radius: var(--app-radius-control);
+  background: var(--app-control-surface);
+  font-size: 0.9rem;
+}
+
+.app-page-state {
+  padding: 2rem;
+  border: 1px dashed var(--app-border-dashed);
+  border-radius: var(--app-radius-card);
+  background: var(--app-surface-muted);
+  color: var(--app-muted-text);
+  text-align: center;
+}
+
+.app-page-state i {
+  display: block;
+  margin-bottom: 0.65rem;
+  color: var(--app-accent);
+  font-size: 1.35rem;
+}
+
+.app-page-state strong,
+.app-page-state span {
+  color: var(--app-muted-text);
+}
+
+.book-cover,
+.mini-cover,
+.book-detail-cover {
+  position: relative;
+  overflow: hidden;
+  color: #ffffff;
+}
+
+.book-cover,
+.book-detail-cover {
+  display: flex;
+  align-items: flex-end;
+  aspect-ratio: 0.68;
+}
+
+.book-cover::after,
+.mini-cover::after,
+.book-detail-cover::after {
+  content: "";
+  position: absolute;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+.book-cover span,
+.book-detail-cover span {
+  position: relative;
+  z-index: 1;
+  font-weight: 800;
+  text-align: left;
+}
+
+.book-cover--navy,
+.book-detail-cover--navy,
+.cover--navy {
+  background: linear-gradient(155deg, #0b2534, #16465b);
+}
+
+.book-cover--gold,
+.book-detail-cover--gold,
+.cover--gold {
+  background: linear-gradient(155deg, #b88222, #d5aa4a);
+}
+
+.book-cover--teal,
+.book-detail-cover--teal,
+.cover--teal {
+  background: linear-gradient(155deg, #0f4f4f, #168f86);
+}
+
+.book-cover--clay,
+.book-detail-cover--clay,
+.cover--clay {
+  background: linear-gradient(155deg, #8a4d3b, #b97951);
 }
 
 .app-mobile-drawer {

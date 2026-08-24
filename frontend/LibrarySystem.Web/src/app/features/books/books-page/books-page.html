@@ -4,13 +4,13 @@
 <section class="books-page">
   <div class="books-page__header grid align-items-center">
     <div class="col-12 lg:col-5">
-      <h1>Katalog</h1>
-      <p>Kütüphanedeki kitapları görüntüleyin.</p>
+      <h1 class="app-page-title">Katalog</h1>
+      <p class="app-page-subtitle">Kütüphanedeki kitapları görüntüleyin.</p>
     </div>
 
     <div class="col-12 lg:col-7">
       <div class="books-page__actions flex align-items-center justify-content-end gap-2">
-        <label class="books-page__search flex align-items-center">
+        <label class="books-page__search app-search-field flex align-items-center">
           <i class="pi pi-search"></i>
           <input
             pInputText
@@ -74,7 +74,7 @@
   </div>
 
   @if (isLoading()) {
-    <div class="books-page__state books-page__state--loading flex flex-column align-items-center justify-content-center">
+    <div class="books-page__state books-page__state--loading app-page-state flex flex-column align-items-center justify-content-center">
       <p-progress-spinner ariaLabel="Kitaplar yükleniyor" />
       <span>Kitaplar yükleniyor...</span>
     </div>
@@ -83,13 +83,13 @@
       {{ errorMessage() }}
     </p-message>
   } @else if (books().length === 0) {
-    <div class="books-page__state">
+    <div class="books-page__state app-page-state">
       <i [class]="activeSearchTerm() ? 'pi pi-search' : 'pi pi-book'"></i>
       <strong>{{ getEmptyStateMessage() }}</strong>
     </div>
   } @else {
     @if (isManagementView()) {
-      <div class="books-management">
+      <div class="books-management app-card-surface">
         <p-table
           [value]="books()"
           [scrollable]="true"
@@ -150,7 +150,7 @@
       <div class="grid books-page__grid">
       @for (book of books(); track book.id) {
         <div class="col-12 sm:col-6 lg:col-4 xl:col-3">
-          <p-card styleClass="book-card">
+          <p-card styleClass="book-card app-card-surface">
             <ng-template #content>
               <article class="book-card__content">
                 <div class="book-cover {{ getCoverClass(book) }}">
@@ -176,8 +176,8 @@
                   (onClick)="viewDetails(book)"
                 />
                 <p-button
-                  label="Ödünç Al"
-                  icon="pi pi-bookmark"
+                  [label]="getBorrowLabel()"
+                  [icon]="getBorrowIcon(book.stock)"
                   size="small"
                   styleClass="book-card__borrow-button"
                   [loading]="isBorrowing(book.id)"

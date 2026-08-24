@@ -85,6 +85,22 @@ export class BookDetailPageComponent implements OnInit {
     return stock > 0 ? 'success' : 'danger';
   }
 
+  protected getBorrowLabel(stock: number): string {
+    if (stock === 0) {
+      return 'Stokta Yok';
+    }
+
+    return this.isAuthenticated() ? 'Ödünç Al' : 'Giriş Yaparak Ödünç Al';
+  }
+
+  protected getBorrowIcon(stock: number): string {
+    if (stock === 0) {
+      return 'pi pi-bookmark';
+    }
+
+    return this.isAuthenticated() ? 'pi pi-bookmark' : 'pi pi-lock';
+  }
+
   protected borrowBook(): void {
     const currentBook = this.book();
 

@@ -281,6 +281,18 @@ export class BooksPageComponent implements OnInit {
     return stock > 0 ? 'success' : 'danger';
   }
 
+  protected getBorrowLabel(): string {
+    return this.isAuthenticated() ? 'Ödünç Al' : 'Giriş Yaparak Ödünç Al';
+  }
+
+  protected getBorrowIcon(stock: number): string {
+    if (stock === 0) {
+      return 'pi pi-bookmark';
+    }
+
+    return this.isAuthenticated() ? 'pi pi-bookmark' : 'pi pi-lock';
+  }
+
   protected getCategoryLabel(category: BookCategory): string {
     return getBookCategoryLabel(category);
   }
