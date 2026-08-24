@@ -61,10 +61,19 @@
                 styleClass="book-detail__borrow-button"
                 (onClick)="borrowBook()"
               />
+              @if (isAuthenticated()) {
+                <div class="book-detail__borrow-usage">
+                  <span>Aktif Ödünç</span>
+                  <p-tag
+                    [value]="activeBorrowCount() + ' / ' + maxActiveBorrowCount"
+                    [severity]="hasReachedBorrowLimit() ? 'danger' : 'secondary'"
+                  />
+                </div>
+              }
             </div>
-            @if (shouldShowOverdueBorrowRestriction(selectedBook.stock)) {
+            @if (shouldShowBorrowRestriction(selectedBook.stock)) {
               <small class="book-detail__borrow-restriction">
-                Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.
+                {{ borrowRestrictionMessage() }}
               </small>
             }
           </div>

@@ -14,6 +14,7 @@ import {
   getOverdueDaysLabel,
   getUpcomingBorrowDueDisplay
 } from '../borrowing/borrow-due-date-display';
+import { BORROWING_POLICY } from '../borrowing/borrowing-policy';
 import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrowing/borrow-status-display';
 import { BorrowedBook } from '../borrowing/models/borrowed-book.model';
 import { BorrowingApiService } from '../borrowing/services/borrowing-api.service';
@@ -94,12 +95,15 @@ export class DashboardComponent implements OnInit {
   });
   protected readonly upcomingBorrowedBooks = computed(() => this.upcomingBorrowedBookEntries().slice(0, 3));
   protected readonly upcomingBorrowCount = computed(() => this.upcomingBorrowedBookEntries().length);
+  protected readonly activeBorrowUsageLabel = computed(() =>
+    `${this.borrowedBooks().length} / ${BORROWING_POLICY.maxActiveBorrowCount}`
+  );
 
   protected readonly summaryItems = computed<SummaryItem[]>(() => [
     { label: 'Toplam Kitap', value: this.totalBookCount().toString(), icon: 'pi pi-book', tone: 'gold' },
     {
       label: 'Aktif Ödünçlerim',
-      value: this.borrowedBooks().length.toString(),
+      value: this.activeBorrowUsageLabel(),
       icon: 'pi pi-bookmark',
       tone: 'teal'
     },

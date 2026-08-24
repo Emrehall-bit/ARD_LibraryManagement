@@ -3,6 +3,10 @@
 }
 
 .my-books-page__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 0.95rem;
 }
 
@@ -17,6 +21,16 @@ h1 {
   margin: 0.4rem 0 0;
   color: var(--app-muted-text);
   font-size: 0.92rem;
+}
+
+.my-books-page__borrow-usage {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--app-muted-text);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .my-books-page__grid {
@@ -167,6 +181,10 @@ h1 {
 }
 
 @media (max-width: 767px) {
+  .my-books-page__header {
+    flex-direction: column;
+  }
+
   .my-book-card__status {
     width: 100%;
     justify-content: space-between;

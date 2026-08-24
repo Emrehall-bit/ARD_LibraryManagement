@@ -6,6 +6,15 @@
     <div class="col-12 lg:col-5">
       <h1 class="app-page-title">Katalog</h1>
       <p class="app-page-subtitle">Kütüphanedeki kitapları görüntüleyin.</p>
+      @if (isAuthenticated()) {
+        <div class="books-page__borrow-usage">
+          <span>Aktif Ödünç</span>
+          <p-tag
+            [value]="activeBorrowCount() + ' / ' + maxActiveBorrowCount"
+            [severity]="hasReachedBorrowLimit() ? 'danger' : 'secondary'"
+          />
+        </div>
+      }
     </div>
 
     <div class="col-12 lg:col-7">
@@ -72,6 +81,12 @@
       </div>
     </div>
   </div>
+
+  @if (borrowRestrictionMessage(); as restrictionMessage) {
+    <p-message severity="warn" size="small" class="books-page__message books-page__borrow-limit-message">
+      {{ restrictionMessage }}
+    </p-message>
+  }
 
   @if (isLoading()) {
     <div class="books-page__state books-page__state--loading app-page-state flex flex-column align-items-center justify-content-center">
@@ -176,7 +191,7 @@
                   (onClick)="viewDetails(book)"
                 />
                 <p-button
-                  [label]="getBorrowLabel()"
+                  [label]="getBorrowLabel(book.stock)"
                   [icon]="getBorrowIcon(book.stock)"
                   size="small"
                   styleClass="book-card__borrow-button"

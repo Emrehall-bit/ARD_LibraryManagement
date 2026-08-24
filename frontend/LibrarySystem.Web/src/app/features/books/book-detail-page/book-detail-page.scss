@@ -118,12 +118,24 @@
 
 .book-detail__actions {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
   margin-top: 1.5rem;
 }
 
 .book-detail__borrow-button {
   min-width: 11rem;
   min-height: 2.55rem;
+}
+
+.book-detail__borrow-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--app-muted-text);
+  font-size: 0.82rem;
+  font-weight: 700;
 }
 
 .book-detail__borrow-restriction {
@@ -174,6 +186,10 @@
   .book-detail__actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .book-detail__borrow-usage {
+    justify-content: space-between;
   }
 
   .book-detail__borrow-button {

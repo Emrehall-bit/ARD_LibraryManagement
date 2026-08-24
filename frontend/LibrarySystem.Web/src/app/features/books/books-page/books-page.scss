@@ -10,6 +10,20 @@
   min-width: 0;
 }
 
+.books-page__borrow-usage {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  color: var(--app-muted-text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.books-page__borrow-limit-message {
+  margin-bottom: 0.75rem;
+}
+
 .books-page__search {
   flex: 1 1 18rem;
   width: min(100%, 28rem);

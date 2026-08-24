@@ -2,8 +2,17 @@
 
 <section class="my-books-page">
   <div class="my-books-page__header">
-    <h1>Ödünç Aldıklarım</h1>
-    <p>Aktif ödünç aldığınız kitapları görüntüleyin, süresini uzatın ve iade edin.</p>
+    <div>
+      <h1>Ödünç Aldıklarım</h1>
+      <p>Aktif ödünç aldığınız kitapları görüntüleyin, süresini uzatın ve iade edin.</p>
+    </div>
+    <div class="my-books-page__borrow-usage">
+      <span>Aktif Ödünç</span>
+      <p-tag
+        [value]="activeBorrowCount() + ' / ' + maxActiveBorrowCount"
+        [severity]="hasReachedBorrowLimit() ? 'danger' : 'secondary'"
+      />
+    </div>
   </div>
 
   @if (isLoading()) {

@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
@@ -9,6 +9,7 @@ import { TagModule } from 'primeng/tag';
 import { ToastModule } from 'primeng/toast';
 import { finalize } from 'rxjs';
 
+import { BORROWING_POLICY } from '../borrowing-policy';
 import { getOverdueDaysLabel } from '../borrow-due-date-display';
 import { BorrowStatusSeverity, getBorrowStatusDisplay } from '../borrow-status-display';
 import { BorrowedBook } from '../models/borrowed-book.model';
@@ -53,6 +54,11 @@ export class MyBooksPageComponent implements OnInit {
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly returningBookId = signal<string | null>(null);
   protected readonly renewingBookId = signal<string | null>(null);
+  protected readonly maxActiveBorrowCount = BORROWING_POLICY.maxActiveBorrowCount;
+  protected readonly activeBorrowCount = computed(() => this.borrowedBooks().length);
+  protected readonly hasReachedBorrowLimit = computed(() =>
+    this.activeBorrowCount() >= BORROWING_POLICY.maxActiveBorrowCount
+  );
 
   ngOnInit(): void {
     this.loadMyBooks();

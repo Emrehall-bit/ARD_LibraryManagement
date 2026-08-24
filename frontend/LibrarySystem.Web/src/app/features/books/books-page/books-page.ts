@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -23,6 +23,7 @@ import { finalize } from 'rxjs';
 import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { LibraryRealtimeService } from '../../../core/realtime/library-realtime.service';
 import { hasActiveOverdueBorrow } from '../../borrowing/borrow-due-date-display';
+import { BORROWING_POLICY } from '../../borrowing/borrowing-policy';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { BookCategoryOption, getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
@@ -118,9 +119,29 @@ export class BooksPageComponent implements OnInit {
   protected readonly isUpdating = signal(false);
   protected readonly editErrorMessage = signal<string | null>(null);
   protected readonly deletingBookId = signal<string | null>(null);
+  protected readonly activeBorrowCount = signal(0);
   protected readonly hasOverdueBorrow = signal(false);
   protected readonly isAdmin = this.authState.isAdmin;
   protected readonly isAuthenticated = this.authState.isAuthenticated;
+  protected readonly maxActiveBorrowCount = BORROWING_POLICY.maxActiveBorrowCount;
+  protected readonly hasReachedBorrowLimit = computed(() =>
+    this.activeBorrowCount() >= BORROWING_POLICY.maxActiveBorrowCount
+  );
+  protected readonly borrowRestrictionMessage = computed(() => {
+    if (!this.isAuthenticated()) {
+      return null;
+    }
+
+    if (this.hasOverdueBorrow()) {
+      return 'Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.';
+    }
+
+    if (this.hasReachedBorrowLimit()) {
+      return 'Aynı anda en fazla 3 kitap ödünç alabilirsiniz.';
+    }
+
+    return null;
+  });
   protected readonly pageSizeOptions = [20, 40, 60, 100];
   protected readonly viewOptions: BooksViewOption[] = [
     { label: 'Kart Görünümü', value: 'catalog' },
@@ -293,7 +314,11 @@ export class BooksPageComponent implements OnInit {
     return stock > 0 ? 'success' : 'danger';
   }
 
-  protected getBorrowLabel(): string {
+  protected getBorrowLabel(stock: number): string {
+    if (stock === 0) {
+      return 'Stokta Yok';
+    }
+
     return this.isAuthenticated() ? 'Ödünç Al' : 'Giriş Yaparak Ödünç Al';
   }
 
@@ -341,7 +366,7 @@ export class BooksPageComponent implements OnInit {
     return book.stock === 0 ||
       this.isBorrowing(book.id) ||
       this.isDeleting(book.id) ||
-      (this.isAuthenticated() && this.hasOverdueBorrow());
+      (this.isAuthenticated() && (this.hasOverdueBorrow() || this.hasReachedBorrowLimit()));
   }
 
   protected shouldShowOverdueBorrowRestriction(book: Book): boolean {
@@ -349,7 +374,9 @@ export class BooksPageComponent implements OnInit {
   }
 
   protected borrowBook(book: Book): void {
-    if (book.stock <= 0 || this.borrowingBookId() || (this.isAuthenticated() && this.hasOverdueBorrow())) {
+    if (book.stock <= 0 ||
+      this.borrowingBookId() ||
+      (this.isAuthenticated() && (this.hasOverdueBorrow() || this.hasReachedBorrowLimit()))) {
       return;
     }
 
@@ -371,6 +398,7 @@ export class BooksPageComponent implements OnInit {
             summary: 'Başarılı',
             detail: 'Kitap ödünç alındı.'
           });
+          this.loadBorrowEligibility();
           this.loadCurrentPage();
         },
         error: (error: unknown) => {
@@ -589,6 +617,7 @@ export class BooksPageComponent implements OnInit {
 
   private loadBorrowEligibility(): void {
     if (!this.isAuthenticated()) {
+      this.activeBorrowCount.set(0);
       this.hasOverdueBorrow.set(false);
       return;
     }
@@ -598,9 +627,11 @@ export class BooksPageComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (borrowedBooks) => {
+          this.activeBorrowCount.set(borrowedBooks.length);
           this.hasOverdueBorrow.set(hasActiveOverdueBorrow(borrowedBooks));
         },
         error: () => {
+          this.activeBorrowCount.set(0);
           this.hasOverdueBorrow.set(false);
         }
       });
@@ -643,6 +674,10 @@ export class BooksPageComponent implements OnInit {
 
     if (error.status === 400 && problem?.detail?.includes('User has overdue borrowed books')) {
       return 'Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.';
+    }
+
+    if (error.status === 400 && problem?.detail?.includes('User has reached the maximum active borrow limit')) {
+      return 'Aynı anda en fazla 3 kitap ödünç alabilirsiniz.';
     }
 
     if (error.status === 409 && problem?.title === 'Concurrency conflict.') {

@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
@@ -14,6 +14,7 @@ import { finalize } from 'rxjs';
 import { AuthStateService } from '../../../core/auth/auth-state.service';
 import { LibraryRealtimeService } from '../../../core/realtime/library-realtime.service';
 import { hasActiveOverdueBorrow } from '../../borrowing/borrow-due-date-display';
+import { BORROWING_POLICY } from '../../borrowing/borrowing-policy';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { getBookCategoryLabel } from '../book-category-options';
 import { Book, BookCategory } from '../models/book.model';
@@ -51,8 +52,28 @@ export class BookDetailPageComponent implements OnInit {
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isBorrowing = signal(false);
+  protected readonly activeBorrowCount = signal(0);
   protected readonly hasOverdueBorrow = signal(false);
   protected readonly isAuthenticated = this.authState.isAuthenticated;
+  protected readonly maxActiveBorrowCount = BORROWING_POLICY.maxActiveBorrowCount;
+  protected readonly hasReachedBorrowLimit = computed(() =>
+    this.activeBorrowCount() >= BORROWING_POLICY.maxActiveBorrowCount
+  );
+  protected readonly borrowRestrictionMessage = computed(() => {
+    if (!this.isAuthenticated()) {
+      return null;
+    }
+
+    if (this.hasOverdueBorrow()) {
+      return 'Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.';
+    }
+
+    if (this.hasReachedBorrowLimit()) {
+      return `Ödünç alma limitinize ulaştınız (${this.activeBorrowCount()} / ${BORROWING_POLICY.maxActiveBorrowCount}).`;
+    }
+
+    return null;
+  });
 
   ngOnInit(): void {
     void this.libraryRealtime.start();
@@ -113,11 +134,13 @@ export class BookDetailPageComponent implements OnInit {
   }
 
   protected isBorrowDisabled(stock: number): boolean {
-    return stock === 0 || this.isBorrowing() || (this.isAuthenticated() && this.hasOverdueBorrow());
+    return stock === 0 ||
+      this.isBorrowing() ||
+      (this.isAuthenticated() && (this.hasOverdueBorrow() || this.hasReachedBorrowLimit()));
   }
 
-  protected shouldShowOverdueBorrowRestriction(stock: number): boolean {
-    return stock > 0 && this.isAuthenticated() && this.hasOverdueBorrow();
+  protected shouldShowBorrowRestriction(stock: number): boolean {
+    return stock > 0 && this.borrowRestrictionMessage() !== null;
   }
 
   protected borrowBook(): void {
@@ -126,7 +149,7 @@ export class BookDetailPageComponent implements OnInit {
     if (!currentBook ||
       currentBook.stock <= 0 ||
       this.isBorrowing() ||
-      (this.isAuthenticated() && this.hasOverdueBorrow())) {
+      (this.isAuthenticated() && (this.hasOverdueBorrow() || this.hasReachedBorrowLimit()))) {
       return;
     }
 
@@ -148,6 +171,7 @@ export class BookDetailPageComponent implements OnInit {
             summary: 'Başarılı',
             detail: 'Kitap ödünç alındı.'
           });
+          this.loadBorrowEligibility();
           this.loadBook(currentBook.id);
         },
         error: (error: unknown) => {
@@ -184,6 +208,7 @@ export class BookDetailPageComponent implements OnInit {
 
   private loadBorrowEligibility(): void {
     if (!this.isAuthenticated()) {
+      this.activeBorrowCount.set(0);
       this.hasOverdueBorrow.set(false);
       return;
     }
@@ -193,9 +218,11 @@ export class BookDetailPageComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (borrowedBooks) => {
+          this.activeBorrowCount.set(borrowedBooks.length);
           this.hasOverdueBorrow.set(hasActiveOverdueBorrow(borrowedBooks));
         },
         error: () => {
+          this.activeBorrowCount.set(0);
           this.hasOverdueBorrow.set(false);
         }
       });
@@ -226,6 +253,10 @@ export class BookDetailPageComponent implements OnInit {
 
     if (error.status === 400 && problem?.detail?.includes('User has overdue borrowed books')) {
       return 'Gecikmiş kitabınızı iade etmeden yeni kitap ödünç alamazsınız.';
+    }
+
+    if (error.status === 400 && problem?.detail?.includes('User has reached the maximum active borrow limit')) {
+      return 'Aynı anda en fazla 3 kitap ödünç alabilirsiniz.';
     }
 
     if (error.status === 409 && problem?.title === 'Concurrency conflict.') {
