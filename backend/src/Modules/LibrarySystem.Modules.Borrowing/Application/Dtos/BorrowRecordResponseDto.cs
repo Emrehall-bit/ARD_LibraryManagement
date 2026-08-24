@@ -9,4 +9,5 @@ public sealed record BorrowRecordResponseDto(
     DateTime DueDate,
     DateTime? ReturnedAt,
     string Status,
-    int RenewalCount);
+    int RenewalCount,
+    int OverdueDays);

@@ -17,6 +17,11 @@ public interface IBorrowRepository
         string userId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> HasOverdueBorrowsAsync(
+        string userId,
+        DateTime utcNow,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(
         BorrowRecord borrowRecord,
         CancellationToken cancellationToken = default);

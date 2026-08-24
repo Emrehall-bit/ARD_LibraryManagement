@@ -94,6 +94,16 @@ public sealed class BorrowRecord
             : BorrowStatus.Borrowed;
     }
 
+    public int GetOverdueDays(DateTime utcNow)
+    {
+        if (GetStatus(utcNow) != BorrowStatus.Overdue)
+        {
+            return 0;
+        }
+
+        return Math.Max(0, (utcNow.Date - DueDate.Date).Days);
+    }
+
     public void Renew(DateTime utcNow)
     {
         if (ReturnedAt is not null)

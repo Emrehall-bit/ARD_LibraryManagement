@@ -47,6 +47,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.Null(borrowRecord.ReturnedAt);
         Assert.Equal(nameof(BorrowStatus.Borrowed), borrowRecord.Status);
         Assert.Equal(0, borrowRecord.RenewalCount);
+        Assert.Equal(0, borrowRecord.OverdueDays);
 
         using var scope = factory.Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -159,6 +160,89 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     }
 
     [Fact]
+    public async Task BorrowBook_WithActiveNonOverdueBorrow_AllowsAnotherBorrow()
+    {
+        using var client = factory.CreateApiClient();
+        var activeBookId = await SeedBookAsync(name: "Active Current Book", stock: 2);
+        var nextBookId = await SeedBookAsync(name: "Allowed Next Book", stock: 2);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, activeBookId);
+
+        var response = await client.PostAsync($"/api/borrow/{nextBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var nextBookStock = await booksDbContext.Books
+            .Where(book => book.Id == nextBookId)
+            .Select(book => book.Stock)
+            .SingleAsync();
+
+        Assert.Equal(1, nextBookStock);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithOverdueBorrow_ReturnsBadRequestWithoutChangingStockOrPublishingNotification()
+    {
+        using var client = factory.CreateApiClient();
+        var overdueBookId = await SeedBookAsync(name: "Overdue Blocking Book", stock: 2);
+        var targetBookId = await SeedBookAsync(name: "Blocked Target Book", stock: 3);
+        var dueDate = DateTime.UtcNow.Date.AddDays(-2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            overdueBookId,
+            borrowedAt: dueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: dueDate);
+
+        var response = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        var problemDetails = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
+
+        Assert.Equal("Business rule violation.", problemDetails?.Title);
+        Assert.Equal("User has overdue borrowed books.", problemDetails?.Detail);
+
+        using var scope = factory.Services.CreateScope();
+        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var borrowingDbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
+
+        var targetBookStock = await booksDbContext.Books
+            .Where(book => book.Id == targetBookId)
+            .Select(book => book.Stock)
+            .SingleAsync();
+        var targetBorrowCount = await borrowingDbContext.BorrowRecords
+            .CountAsync(borrowRecord => borrowRecord.BookId == targetBookId);
+
+        Assert.Equal(3, targetBookStock);
+        Assert.Equal(0, targetBorrowCount);
+        Assert.Empty(factory.BookStockChangeNotifications.Notifications);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithAnotherUsersOverdueBorrow_ReturnsSuccess()
+    {
+        const string currentUserId = "not-overdue-user";
+        using var client = CreateAuthenticatedClient(IdentityRoles.Member, currentUserId);
+        var overdueBookId = await SeedBookAsync(name: "Other User Overdue Book", stock: 2);
+        var targetBookId = await SeedBookAsync(name: "Other User Does Not Block Book", stock: 2);
+        var dueDate = DateTime.UtcNow.Date.AddDays(-1);
+
+        await SeedBorrowRecordAsync(
+            "overdue-other-user",
+            overdueBookId,
+            borrowedAt: dueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: dueDate);
+
+        var response = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task GetMyBooks_ReturnsOnlyCurrentUsersActiveBorrows()
     {
         using var client = factory.CreateApiClient();
@@ -248,7 +332,28 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         var borrowRecord = Assert.Single(borrowRecords);
         Assert.Equal(bookId, borrowRecord.BookId);
         Assert.Equal(nameof(BorrowStatus.Overdue), borrowRecord.Status);
+        Assert.True(borrowRecord.OverdueDays > 0);
         Assert.Null(borrowRecord.ReturnedAt);
+    }
+
+    [Fact]
+    public async Task GetMyBooks_WithBorrowedStatus_ReturnsZeroOverdueDays()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync(name: "Current Borrowed Book", stock: 2);
+
+        await SeedBorrowRecordAsync(TestAuthenticationHandler.UserId, bookId);
+
+        var response = await client.GetAsync("/api/borrow/my-books");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.Equal(nameof(BorrowStatus.Borrowed), borrowRecord.Status);
+        Assert.Equal(0, borrowRecord.OverdueDays);
     }
 
     [Fact]
@@ -269,6 +374,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.NotEqual(default, borrowRecord.DueDate);
         Assert.NotNull(borrowRecord.ReturnedAt);
         Assert.Equal(nameof(BorrowStatus.Returned), borrowRecord.Status);
+        Assert.Equal(0, borrowRecord.OverdueDays);
 
         using var scope = factory.Services.CreateScope();
         var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -311,6 +417,37 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         Assert.NotNull(borrowRecord);
         Assert.NotNull(borrowRecord.ReturnedAt);
         Assert.Equal(nameof(BorrowStatus.Returned), borrowRecord.Status);
+        Assert.Equal(0, borrowRecord.OverdueDays);
+    }
+
+    [Fact]
+    public async Task ReturnBook_WithOverdueBorrow_AllowsBorrowAfterReturn()
+    {
+        using var client = factory.CreateApiClient();
+        var overdueBookId = await SeedBookAsync(name: "Return To Unblock Book", stock: 1);
+        var targetBookId = await SeedBookAsync(name: "Borrow After Return Book", stock: 2);
+        var dueDate = DateTime.UtcNow.Date.AddDays(-3);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            overdueBookId,
+            borrowedAt: dueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: dueDate);
+
+        var returnResponse = await client.PostAsync($"/api/return/{overdueBookId}", content: null);
+        var borrowResponse = await client.PostAsync($"/api/borrow/{targetBookId}", content: null);
+
+        Assert.Equal(HttpStatusCode.OK, returnResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, borrowResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var booksDbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var targetBookStock = await booksDbContext.Books
+            .Where(book => book.Id == targetBookId)
+            .Select(book => book.Stock)
+            .SingleAsync();
+
+        Assert.Equal(1, targetBookStock);
     }
 
     [Fact]
@@ -592,6 +729,31 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     }
 
     [Fact]
+    public async Task GetHistory_WithOverdueBorrow_ReturnsOverdueDays()
+    {
+        using var client = factory.CreateApiClient();
+        var dueDate = DateTime.UtcNow.Date.AddDays(-4);
+        var bookId = await SeedBookAsync(name: "History Overdue Book", stock: 2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            bookId,
+            borrowedAt: dueDate.AddDays(-BorrowingLoanPolicy.DefaultLoanPeriodDays),
+            dueDate: dueDate);
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+
+        Assert.NotNull(borrowRecords);
+        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.Equal(nameof(BorrowStatus.Overdue), borrowRecord.Status);
+        Assert.Equal(4, borrowRecord.OverdueDays);
+    }
+
+    [Fact]
     public async Task GetHistory_ReturnsOnlyCurrentUsersBorrowRecords()
     {
         using var client = factory.CreateApiClient();
@@ -767,5 +929,10 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         DateTime DueDate,
         DateTime? ReturnedAt,
         string Status,
-        int RenewalCount);
+        int RenewalCount,
+        int OverdueDays);
+
+    private sealed record ProblemDetailsResponse(
+        string? Title,
+        string? Detail);
 }

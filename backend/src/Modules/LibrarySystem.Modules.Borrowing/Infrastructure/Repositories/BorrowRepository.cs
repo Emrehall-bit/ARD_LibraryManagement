@@ -47,6 +47,21 @@ internal sealed class BorrowRepository(BorrowingDbContext dbContext) : IBorrowRe
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<bool> HasOverdueBorrowsAsync(
+        string userId,
+        DateTime utcNow,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.BorrowRecords
+            .AsNoTracking()
+            .AnyAsync(
+                borrowRecord =>
+                    borrowRecord.UserId == userId &&
+                    borrowRecord.ReturnedAt == null &&
+                    borrowRecord.DueDate < utcNow,
+                cancellationToken);
+    }
+
     public async Task AddAsync(
         BorrowRecord borrowRecord,
         CancellationToken cancellationToken = default)

@@ -23,6 +23,12 @@ internal sealed class BorrowingService(
         CancellationToken cancellationToken = default)
     {
         var userId = GetCurrentUserId();
+        var utcNow = clock.UtcNow;
+
+        if (await borrowRepository.HasOverdueBorrowsAsync(userId, utcNow, cancellationToken))
+        {
+            throw new BusinessException("User has overdue borrowed books.");
+        }
 
         var result = await transactionCoordinator.ExecuteAsync(async transactionCancellationToken =>
         {
@@ -218,7 +224,8 @@ internal sealed class BorrowingService(
             borrowRecord.DueDate,
             borrowRecord.ReturnedAt,
             borrowRecord.GetStatus(utcNow).ToString(),
-            borrowRecord.RenewalCount);
+            borrowRecord.RenewalCount,
+            borrowRecord.GetOverdueDays(utcNow));
     }
 
     private sealed record BorrowingStockChangeResult(
