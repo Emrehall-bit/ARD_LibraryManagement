@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
+import { BookDetail, BookImage } from '../models/book-detail.model';
 import { Book, BookCategory } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
 import { PagedBooksResponse } from '../models/paged-books-response.model';
@@ -54,8 +55,8 @@ export class BooksApiService {
     return this.http.get<PagedBooksResponse>(this.apiUrl, { params });
   }
 
-  getById(id: string): Observable<Book> {
-    return this.http.get<Book>(`${this.apiUrl}/${id}`);
+  getById(id: string): Observable<BookDetail> {
+    return this.http.get<BookDetail>(`${this.apiUrl}/${id}`);
   }
 
   create(request: CreateBookRequest): Observable<Book> {
@@ -68,5 +69,22 @@ export class BooksApiService {
 
   delete(id: string): Observable<void> {
     return this.http.delete<void>(`${this.apiUrl}/${id}`);
+  }
+
+  uploadImage(bookId: string, file: File, isCover: boolean, sortOrder: number): Observable<BookImage> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('isCover', String(isCover));
+    formData.append('sortOrder', String(sortOrder));
+
+    return this.http.post<BookImage>(`${this.apiUrl}/${bookId}/images`, formData);
+  }
+
+  setCover(bookId: string, imageId: string): Observable<BookImage> {
+    return this.http.put<BookImage>(`${this.apiUrl}/${bookId}/images/${imageId}/cover`, {});
+  }
+
+  deleteImage(bookId: string, imageId: string): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${bookId}/images/${imageId}`);
   }
 }

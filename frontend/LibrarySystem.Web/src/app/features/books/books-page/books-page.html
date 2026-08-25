@@ -145,6 +145,16 @@
                     (onClick)="openEditDialog(book)"
                   />
                   <p-button
+                    icon="pi pi-images"
+                    size="small"
+                    severity="secondary"
+                    [rounded]="true"
+                    [text]="true"
+                    ariaLabel="Görseller"
+                    [disabled]="isDeleting(book.id)"
+                    (onClick)="openImagesDialog(book)"
+                  />
+                  <p-button
                     icon="pi pi-trash"
                     size="small"
                     severity="danger"
@@ -214,6 +224,15 @@
                       styleClass="book-card__manage-button"
                       [disabled]="isDeleting(book.id)"
                       (onClick)="openEditDialog(book)"
+                    />
+                    <p-button
+                      label="Görseller"
+                      icon="pi pi-images"
+                      size="small"
+                      severity="secondary"
+                      styleClass="book-card__manage-button"
+                      [disabled]="isDeleting(book.id)"
+                      (onClick)="openImagesDialog(book)"
                     />
                     <p-button
                       label="Sil"
@@ -346,6 +365,130 @@
       />
     </div>
   </form>
+</p-dialog>
+
+<p-dialog
+  header="Kitap Görselleri"
+  [visible]="isImageDialogVisible()"
+  (visibleChange)="isImageDialogVisible.set($event)"
+  (onHide)="closeImagesDialog()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="!isLoadingImages() && !isUploadingImage() && !deletingImageId() && !settingCoverImageId()"
+  [dismissableMask]="!isLoadingImages() && !isUploadingImage() && !deletingImageId() && !settingCoverImageId()"
+  styleClass="book-images-dialog"
+>
+  <div class="book-images">
+    @if (selectedImageBookName()) {
+      <p class="book-images__subtitle">{{ selectedImageBookName() }}</p>
+    }
+
+    @if (imageErrorMessage()) {
+      <p-message severity="error" size="small" class="book-images__message">
+        {{ imageErrorMessage() }}
+      </p-message>
+    }
+
+    @if (isLoadingImages()) {
+      <div class="book-images__loading flex flex-column align-items-center justify-content-center">
+        <p-progress-spinner ariaLabel="Kitap görselleri yükleniyor" />
+        <span>Görseller yükleniyor...</span>
+      </div>
+    } @else {
+      <section class="book-images__upload">
+        <div class="book-images__file-field">
+          <label for="bookImageFile">Görsel Seç</label>
+          <input
+            #bookImageFileInput
+            id="bookImageFile"
+            type="file"
+            [accept]="acceptedImageTypes"
+            [disabled]="isImageLimitReached() || isUploadingImage()"
+            (change)="selectImageFile($event)"
+          />
+        </div>
+
+        <div class="book-images__upload-actions">
+          <div class="book-images__cover-choice">
+            <p-checkbox
+              inputId="bookImageCover"
+              [binary]="true"
+              [ngModel]="shouldSetImageCover()"
+              [disabled]="isImageLimitReached() || isUploadingImage()"
+              (ngModelChange)="shouldSetImageCover.set($any($event))"
+            />
+            <label for="bookImageCover">Kapak olarak ayarla</label>
+          </div>
+
+          <p-button
+            label="Yükle"
+            icon="pi pi-upload"
+            size="small"
+            [loading]="isUploadingImage()"
+            [disabled]="!canUploadImage()"
+            (onClick)="uploadImage()"
+          />
+        </div>
+      </section>
+
+      @if (isImageLimitReached()) {
+        <p-message severity="info" size="small" class="book-images__message">
+          Bir kitaba en fazla 5 görsel ekleyebilirsiniz.
+        </p-message>
+      }
+
+      @if (images().length === 0) {
+        <div class="book-images__empty">
+          <i class="pi pi-image"></i>
+          <strong>Henüz görsel yok.</strong>
+        </div>
+      } @else {
+        <div class="book-images__grid">
+          @for (image of images(); track image.id) {
+            <article class="book-images__item">
+              <div class="book-images__preview">
+                <img [src]="image.url" [alt]="getImageAltText()" />
+                @if (image.isCover) {
+                  <p-tag value="Kapak" severity="success" />
+                }
+              </div>
+
+              <div class="book-images__item-meta">
+                <span>Sıra {{ image.sortOrder }}</span>
+              </div>
+
+              <div class="book-images__item-actions">
+                @if (!image.isCover) {
+                  <p-button
+                    label="Kapak Yap"
+                    icon="pi pi-star"
+                    size="small"
+                    severity="secondary"
+                    [outlined]="true"
+                    [loading]="isSettingCover(image.id)"
+                    [disabled]="isSettingCover(image.id) || !!deletingImageId()"
+                    (onClick)="setCover(image)"
+                  />
+                }
+
+                <p-button
+                  label="Sil"
+                  icon="pi pi-trash"
+                  size="small"
+                  severity="danger"
+                  [outlined]="true"
+                  [loading]="isDeletingImage(image.id)"
+                  [disabled]="isDeletingImage(image.id) || !!settingCoverImageId()"
+                  (onClick)="confirmDeleteImage(image)"
+                />
+              </div>
+            </article>
+          }
+        </div>
+      }
+    }
+  </div>
 </p-dialog>
 
 <p-dialog

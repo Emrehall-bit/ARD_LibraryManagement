@@ -17,6 +17,7 @@ import { hasActiveOverdueBorrow } from '../../borrowing/borrow-due-date-display'
 import { BORROWING_POLICY } from '../../borrowing/borrowing-policy';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { getBookCategoryLabel } from '../book-category-options';
+import { BookDetail } from '../models/book-detail.model';
 import { Book, BookCategory } from '../models/book.model';
 import { BooksApiService } from '../services/books-api.service';
 
@@ -48,7 +49,7 @@ export class BookDetailPageComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
 
-  protected readonly book = signal<Book | null>(null);
+  protected readonly book = signal<BookDetail | null>(null);
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isBorrowing = signal(false);

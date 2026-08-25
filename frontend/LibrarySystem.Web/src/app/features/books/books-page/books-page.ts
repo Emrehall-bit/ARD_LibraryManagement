@@ -1,11 +1,12 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, ElementRef, inject, OnInit, signal, ViewChild } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ConfirmationService, MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
+import { CheckboxModule } from 'primeng/checkbox';
 import { ConfirmDialogModule } from 'primeng/confirmdialog';
 import { DialogModule } from 'primeng/dialog';
 import { InputNumberModule } from 'primeng/inputnumber';
@@ -26,6 +27,7 @@ import { hasActiveOverdueBorrow } from '../../borrowing/borrow-due-date-display'
 import { BORROWING_POLICY } from '../../borrowing/borrowing-policy';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { BookCategoryOption, getBookCategoryLabel } from '../book-category-options';
+import { BookDetail, BookImage } from '../models/book-detail.model';
 import { Book, BookCategory } from '../models/book.model';
 import { CreateBookRequest } from '../models/create-book-request.model';
 import { UpdateBookRequest } from '../models/update-book-request.model';
@@ -66,6 +68,7 @@ interface BooksViewOption {
   imports: [
     ButtonModule,
     CardModule,
+    CheckboxModule,
     ConfirmDialogModule,
     DialogModule,
     FormsModule,
@@ -86,6 +89,8 @@ interface BooksViewOption {
   styleUrl: './books-page.scss'
 })
 export class BooksPageComponent implements OnInit {
+  @ViewChild('bookImageFileInput') private readonly bookImageFileInput?: ElementRef<HTMLInputElement>;
+
   private readonly authState = inject(AuthStateService);
   private readonly booksApi = inject(BooksApiService);
   private readonly borrowingApi = inject(BorrowingApiService);
@@ -96,6 +101,7 @@ export class BooksPageComponent implements OnInit {
   private readonly messageService = inject(MessageService);
   private readonly router = inject(Router);
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
+  private readonly allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
   protected readonly books = signal<Book[]>([]);
   protected readonly isLoading = signal(false);
@@ -119,11 +125,34 @@ export class BooksPageComponent implements OnInit {
   protected readonly isUpdating = signal(false);
   protected readonly editErrorMessage = signal<string | null>(null);
   protected readonly deletingBookId = signal<string | null>(null);
+  protected readonly selectedImageBookId = signal<string | null>(null);
+  protected readonly selectedImageBookName = signal<string | null>(null);
+  protected readonly images = signal<BookImage[]>([]);
+  protected readonly isImageDialogVisible = signal(false);
+  protected readonly isLoadingImages = signal(false);
+  protected readonly isUploadingImage = signal(false);
+  protected readonly deletingImageId = signal<string | null>(null);
+  protected readonly settingCoverImageId = signal<string | null>(null);
+  protected readonly imageErrorMessage = signal<string | null>(null);
+  protected readonly selectedImageFile = signal<File | null>(null);
+  protected readonly shouldSetImageCover = signal(false);
   protected readonly activeBorrowCount = signal(0);
   protected readonly hasOverdueBorrow = signal(false);
   protected readonly isAdmin = this.authState.isAdmin;
   protected readonly isAuthenticated = this.authState.isAuthenticated;
   protected readonly maxActiveBorrowCount = BORROWING_POLICY.maxActiveBorrowCount;
+  protected readonly maxImagesPerBook = 5;
+  protected readonly maxImageSizeBytes = 5 * 1024 * 1024;
+  protected readonly acceptedImageTypes = 'image/jpeg,image/png,image/webp';
+  protected readonly isImageLimitReached = computed(() => this.images().length >= this.maxImagesPerBook);
+  protected readonly canUploadImage = computed(() =>
+    this.isAdmin() &&
+    this.selectedImageBookId() !== null &&
+    this.selectedImageFile() !== null &&
+    !this.isImageLimitReached() &&
+    !this.isLoadingImages() &&
+    !this.isUploadingImage()
+  );
   protected readonly hasReachedBorrowLimit = computed(() =>
     this.activeBorrowCount() >= BORROWING_POLICY.maxActiveBorrowCount
   );
@@ -299,6 +328,30 @@ export class BooksPageComponent implements OnInit {
     this.resetEditForm();
   }
 
+  protected openImagesDialog(book: Book): void {
+    if (!this.isAdmin() || this.isDeleting(book.id)) {
+      return;
+    }
+
+    this.selectedImageBookId.set(book.id);
+    this.selectedImageBookName.set(book.name);
+    this.images.set([]);
+    this.imageErrorMessage.set(null);
+    this.selectedImageFile.set(null);
+    this.shouldSetImageCover.set(false);
+    this.isImageDialogVisible.set(true);
+    this.loadBookImages();
+  }
+
+  protected closeImagesDialog(): void {
+    if (this.isLoadingImages() || this.isUploadingImage() || this.deletingImageId() || this.settingCoverImageId()) {
+      return;
+    }
+
+    this.isImageDialogVisible.set(false);
+    this.resetImageDialog();
+  }
+
   protected getCoverClass(book: Book): string {
     const source = `${book.id}${book.name}`;
     const hash = Array.from(source).reduce((total, character) => total + character.charCodeAt(0), 0);
@@ -360,6 +413,131 @@ export class BooksPageComponent implements OnInit {
 
   protected isDeleting(bookId: string): boolean {
     return this.deletingBookId() === bookId;
+  }
+
+  protected selectImageFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+
+    this.imageErrorMessage.set(null);
+
+    if (!file) {
+      this.selectedImageFile.set(null);
+      return;
+    }
+
+    const validationMessage = this.getImageFileValidationMessage(file);
+
+    if (validationMessage) {
+      this.selectedImageFile.set(null);
+      this.imageErrorMessage.set(validationMessage);
+      input.value = '';
+      return;
+    }
+
+    this.selectedImageFile.set(file);
+  }
+
+  protected uploadImage(): void {
+    this.imageErrorMessage.set(null);
+
+    if (!this.isAdmin() || !this.canUploadImage()) {
+      return;
+    }
+
+    const bookId = this.selectedImageBookId();
+    const file = this.selectedImageFile();
+
+    if (!bookId || !file) {
+      return;
+    }
+
+    const validationMessage = this.getImageFileValidationMessage(file);
+
+    if (validationMessage) {
+      this.imageErrorMessage.set(validationMessage);
+      this.clearImageFileInput();
+      return;
+    }
+
+    this.isUploadingImage.set(true);
+
+    this.booksApi
+      .uploadImage(bookId, file, this.shouldSetImageCover(), this.getNextImageSortOrder())
+      .pipe(finalize(() => this.isUploadingImage.set(false)))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Başarılı',
+            detail: 'Görsel yüklendi.'
+          });
+          this.selectedImageFile.set(null);
+          this.shouldSetImageCover.set(false);
+          this.clearImageFileInput();
+          this.loadBookImages();
+        },
+        error: (error: unknown) => {
+          this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
+        }
+      });
+  }
+
+  protected setCover(image: BookImage): void {
+    const bookId = this.selectedImageBookId();
+
+    if (!this.isAdmin() || !bookId || image.isCover || this.settingCoverImageId()) {
+      return;
+    }
+
+    this.imageErrorMessage.set(null);
+    this.settingCoverImageId.set(image.id);
+
+    this.booksApi
+      .setCover(bookId, image.id)
+      .pipe(finalize(() => this.settingCoverImageId.set(null)))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Başarılı',
+            detail: 'Kapak görseli güncellendi.'
+          });
+          this.loadBookImages();
+        },
+        error: (error: unknown) => {
+          this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
+        }
+      });
+  }
+
+  protected confirmDeleteImage(image: BookImage): void {
+    if (!this.isAdmin() || this.deletingImageId()) {
+      return;
+    }
+
+    this.confirmationService.confirm({
+      header: 'Görseli Sil',
+      message: 'Bu görseli silmek istediğinizden emin misiniz?',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Evet, Sil',
+      rejectLabel: 'Vazgeç',
+      acceptButtonStyleClass: 'p-button-danger',
+      rejectButtonStyleClass: 'p-button-secondary p-button-text',
+      accept: () => this.deleteImage(image)
+    });
+  }
+
+  protected isDeletingImage(imageId: string): boolean {
+    return this.deletingImageId() === imageId;
+  }
+
+  protected isSettingCover(imageId: string): boolean {
+    return this.settingCoverImageId() === imageId;
+  }
+
+  protected getImageAltText(): string {
+    return `${this.selectedImageBookName() ?? 'Kitap'} görseli`;
   }
 
   protected isBorrowDisabled(book: Book): boolean {
@@ -583,6 +761,59 @@ export class BooksPageComponent implements OnInit {
       });
   }
 
+  private loadBookImages(): void {
+    const bookId = this.selectedImageBookId();
+
+    if (!bookId) {
+      return;
+    }
+
+    this.isLoadingImages.set(true);
+    this.imageErrorMessage.set(null);
+
+    this.booksApi
+      .getById(bookId)
+      .pipe(finalize(() => this.isLoadingImages.set(false)))
+      .subscribe({
+        next: (book) => {
+          this.selectedImageBookName.set(book.name);
+          this.images.set(this.getSortedImages(book));
+        },
+        error: (error: unknown) => {
+          this.images.set([]);
+          this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
+        }
+      });
+  }
+
+  private deleteImage(image: BookImage): void {
+    const bookId = this.selectedImageBookId();
+
+    if (!bookId || this.deletingImageId()) {
+      return;
+    }
+
+    this.imageErrorMessage.set(null);
+    this.deletingImageId.set(image.id);
+
+    this.booksApi
+      .deleteImage(bookId, image.id)
+      .pipe(finalize(() => this.deletingImageId.set(null)))
+      .subscribe({
+        next: () => {
+          this.messageService.add({
+            severity: 'success',
+            summary: 'Başarılı',
+            detail: 'Görsel silindi.'
+          });
+          this.loadBookImages();
+        },
+        error: (error: unknown) => {
+          this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
+        }
+      });
+  }
+
   private loadBooks(): void {
     this.isLoading.set(true);
     this.errorMessage.set(null);
@@ -745,6 +976,75 @@ export class BooksPageComponent implements OnInit {
     return 'Kitap silinirken bir hata oluştu.';
   }
 
+  private getImageFileValidationMessage(file: File): string | null {
+    if (file.size === 0) {
+      return 'Boş dosya yüklenemez.';
+    }
+
+    if (file.size > this.maxImageSizeBytes) {
+      return 'Görsel boyutu en fazla 5 MB olabilir.';
+    }
+
+    if (!this.allowedImageTypes.has(file.type)) {
+      return 'Desteklenmeyen görsel formatı. JPEG, PNG veya WebP yükleyin.';
+    }
+
+    return null;
+  }
+
+  private getImageOperationErrorMessage(error: unknown): string {
+    if (!(error instanceof HttpErrorResponse)) {
+      return 'Görsel işlemi sırasında bir hata oluştu.';
+    }
+
+    const problem = this.getProblemDetails(error);
+    const detail = problem?.detail;
+
+    if (detail === 'Book image limit has been reached.') {
+      return 'Bu kitaba en fazla 5 görsel ekleyebilirsiniz.';
+    }
+
+    if (detail === 'Unsupported image content type.') {
+      return 'Desteklenmeyen görsel formatı.';
+    }
+
+    if (detail === 'Image file is empty.') {
+      return 'Boş görsel yüklenemez.';
+    }
+
+    if (detail === 'Image file exceeds the maximum allowed size.') {
+      return 'Görsel boyutu en fazla 5 MB olabilir.';
+    }
+
+    if (detail === 'Book image not found.') {
+      return 'Görsel bulunamadı.';
+    }
+
+    if (problem?.title === 'Object storage unavailable.' || detail === 'Object storage unavailable.') {
+      return 'Görsel depolama servisine şu anda erişilemiyor.';
+    }
+
+    return 'Görsel işlemi sırasında bir hata oluştu.';
+  }
+
+  private getNextImageSortOrder(): number {
+    const sortOrders = this.images().map((image) => image.sortOrder);
+
+    return sortOrders.length === 0 ? 0 : Math.max(...sortOrders) + 1;
+  }
+
+  private getSortedImages(book: BookDetail): BookImage[] {
+    return [...book.images].sort((first, second) =>
+      first.sortOrder - second.sortOrder || first.id.localeCompare(second.id)
+    );
+  }
+
+  private clearImageFileInput(): void {
+    if (this.bookImageFileInput) {
+      this.bookImageFileInput.nativeElement.value = '';
+    }
+  }
+
   private getProblemDetails(error: HttpErrorResponse): { title?: string; detail?: string } | null {
     const body = error.error as { title?: unknown; detail?: unknown } | null;
 
@@ -773,6 +1073,16 @@ export class BooksPageComponent implements OnInit {
     });
     this.selectedBook.set(null);
     this.editErrorMessage.set(null);
+  }
+
+  private resetImageDialog(): void {
+    this.selectedImageBookId.set(null);
+    this.selectedImageBookName.set(null);
+    this.images.set([]);
+    this.imageErrorMessage.set(null);
+    this.selectedImageFile.set(null);
+    this.shouldSetImageCover.set(false);
+    this.clearImageFileInput();
   }
 
   private getCreateRequiredMessage(controlName: CreateBookControlName): string {
