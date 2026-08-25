@@ -5,6 +5,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
+import { GalleryModule } from 'primeng/gallery';
 import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TagModule } from 'primeng/tag';
@@ -28,6 +29,7 @@ type StockSeverity = 'success' | 'danger';
   imports: [
     ButtonModule,
     CardModule,
+    GalleryModule,
     MessageModule,
     ProgressSpinnerModule,
     RouterLink,
@@ -50,6 +52,8 @@ export class BookDetailPageComponent implements OnInit {
   private readonly coverTones = ['navy', 'gold', 'teal', 'clay'];
 
   protected readonly book = signal<BookDetail | null>(null);
+  protected readonly activeImageIndex = signal(0);
+  protected readonly brokenImageIds = signal<ReadonlySet<string>>(new Set());
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isBorrowing = signal(false);
@@ -144,6 +148,40 @@ export class BookDetailPageComponent implements OnInit {
     return stock > 0 && this.borrowRestrictionMessage() !== null;
   }
 
+  protected hasImages(book: BookDetail): boolean {
+    return book.images.length > 0;
+  }
+
+  protected hasMultipleImages(book: BookDetail): boolean {
+    return book.images.length > 1;
+  }
+
+  protected hasMetadata(book: BookDetail): boolean {
+    return !!book.publisher || book.publishedYear !== null || !!book.isbn;
+  }
+
+  protected hasDescription(book: BookDetail): boolean {
+    return !!book.description?.trim();
+  }
+
+  protected getDescription(book: BookDetail): string {
+    return book.description?.trim() ?? '';
+  }
+
+  protected getImageAltText(book: BookDetail, imageIndex: number): string {
+    return imageIndex === 0 || book.images[imageIndex]?.isCover
+      ? `${book.name} kapak görseli`
+      : `${book.name} görseli ${imageIndex + 1}`;
+  }
+
+  protected isImageBroken(imageId: string): boolean {
+    return this.brokenImageIds().has(imageId);
+  }
+
+  protected markImageAsBroken(imageId: string): void {
+    this.brokenImageIds.update((ids) => new Set(ids).add(imageId));
+  }
+
   protected borrowBook(): void {
     const currentBook = this.book();
 
@@ -195,6 +233,8 @@ export class BookDetailPageComponent implements OnInit {
       .subscribe({
         next: (book) => {
           this.book.set(book);
+          this.activeImageIndex.set(this.getInitialImageIndex(book));
+          this.brokenImageIds.set(new Set());
         },
         error: (error: unknown) => {
           this.book.set(null);
@@ -205,6 +245,12 @@ export class BookDetailPageComponent implements OnInit {
 
   private updateBookStock(bookId: string, stock: number): void {
     this.book.update((book) => book?.id === bookId ? { ...book, stock } : book);
+  }
+
+  private getInitialImageIndex(book: BookDetail): number {
+    const coverIndex = book.images.findIndex((image) => image.isCover);
+
+    return coverIndex >= 0 ? coverIndex : 0;
   }
 
   private loadBorrowEligibility(): void {

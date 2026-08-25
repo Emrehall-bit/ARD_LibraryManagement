@@ -25,11 +25,87 @@
     <p-card styleClass="book-detail-card">
       <ng-template #content>
         <article class="book-detail">
-          <div class="book-detail__cover-column">
-            <div class="book-detail-cover {{ getCoverClass(selectedBook) }}">
-              <span>{{ selectedBook.name }}</span>
-            </div>
-          </div>
+          <section class="book-detail__media-column" aria-label="Kitap görselleri">
+            @if (hasImages(selectedBook)) {
+              <p-gallery
+                class="book-gallery"
+                [(activeIndex)]="activeImageIndex"
+                aria-label="Kitap görsel galerisi"
+              >
+                <p-gallery-content>
+                  @for (image of selectedBook.images; track image.id; let imageIndex = $index) {
+                    <p-gallery-item>
+                      <div class="book-gallery__image-frame">
+                        @if (isImageBroken(image.id)) {
+                          <div class="book-detail-cover book-detail-cover--fallback {{ getCoverClass(selectedBook) }}">
+                            <i class="pi pi-book"></i>
+                            <span>{{ selectedBook.name }}</span>
+                          </div>
+                        } @else {
+                          <img
+                            class="book-gallery__image"
+                            [src]="image.url"
+                            [alt]="getImageAltText(selectedBook, imageIndex)"
+                            (error)="markImageAsBroken(image.id)"
+                          />
+                        }
+                      </div>
+                    </p-gallery-item>
+                  }
+
+                  @if (hasMultipleImages(selectedBook)) {
+                    <button
+                      type="button"
+                      pGalleryPrev
+                      class="book-gallery__nav book-gallery__nav--prev"
+                      aria-label="Önceki görsel"
+                    >
+                      <i class="pi pi-chevron-left"></i>
+                    </button>
+                    <button
+                      type="button"
+                      pGalleryNext
+                      class="book-gallery__nav book-gallery__nav--next"
+                      aria-label="Sonraki görsel"
+                    >
+                      <i class="pi pi-chevron-right"></i>
+                    </button>
+                  }
+                </p-gallery-content>
+
+                @if (hasMultipleImages(selectedBook)) {
+                  <p-gallery-footer>
+                    <p-gallery-thumbnail [slidesPerPage]="5" [loop]="false">
+                      <p-gallery-thumbnail-content>
+                        @for (image of selectedBook.images; track image.id; let imageIndex = $index) {
+                          <p-gallery-thumbnail-item [index]="imageIndex">
+                            <ng-template #content>
+                              <span class="book-gallery__thumb">
+                                @if (isImageBroken(image.id)) {
+                                  <i class="pi pi-book"></i>
+                                } @else {
+                                  <img
+                                    [src]="image.url"
+                                    [alt]="getImageAltText(selectedBook, imageIndex)"
+                                    (error)="markImageAsBroken(image.id)"
+                                  />
+                                }
+                              </span>
+                            </ng-template>
+                          </p-gallery-thumbnail-item>
+                        }
+                      </p-gallery-thumbnail-content>
+                    </p-gallery-thumbnail>
+                  </p-gallery-footer>
+                }
+              </p-gallery>
+            } @else {
+              <div class="book-detail-cover book-detail-cover--fallback {{ getCoverClass(selectedBook) }}">
+                <i class="pi pi-book"></i>
+                <span>{{ selectedBook.name }}</span>
+              </div>
+            }
+          </section>
 
           <div class="book-detail__content">
             <div class="book-detail__heading">
@@ -51,6 +127,36 @@
                 />
               </div>
             </div>
+
+            @if (hasMetadata(selectedBook)) {
+              <div class="book-detail__metadata">
+                @if (selectedBook.publisher) {
+                  <div>
+                    <span>Yayınevi</span>
+                    <strong>{{ selectedBook.publisher }}</strong>
+                  </div>
+                }
+                @if (selectedBook.publishedYear !== null) {
+                  <div>
+                    <span>Yayın Yılı</span>
+                    <strong>{{ selectedBook.publishedYear }}</strong>
+                  </div>
+                }
+                @if (selectedBook.isbn) {
+                  <div>
+                    <span>ISBN</span>
+                    <strong>{{ selectedBook.isbn }}</strong>
+                  </div>
+                }
+              </div>
+            }
+
+            @if (hasDescription(selectedBook)) {
+              <section class="book-detail__description">
+                <h2>Kitap Hakkında</h2>
+                <p>{{ getDescription(selectedBook) }}</p>
+              </section>
+            }
 
             <div class="book-detail__actions">
               <p-button
