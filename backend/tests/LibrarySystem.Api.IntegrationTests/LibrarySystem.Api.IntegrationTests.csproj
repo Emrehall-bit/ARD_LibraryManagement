@@ -22,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\LibrarySystem.Api\LibrarySystem.Api.csproj" />
+    <ProjectReference Include="..\..\tools\LibrarySystem.Tools.CoverImport\LibrarySystem.Tools.CoverImport.csproj" />
   </ItemGroup>
 
 </Project>

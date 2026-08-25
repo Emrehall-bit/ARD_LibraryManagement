@@ -14,4 +14,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/LibrarySystem.Api.IntegrationTests/LibrarySystem.Api.IntegrationTests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/LibrarySystem.Tools.CoverImport/LibrarySystem.Tools.CoverImport.csproj" />
+  </Folder>
 </Solution>
