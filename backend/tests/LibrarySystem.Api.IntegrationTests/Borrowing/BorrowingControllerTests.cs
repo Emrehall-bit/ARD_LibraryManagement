@@ -776,9 +776,9 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
-        Assert.NotNull(borrowRecords);
-        var borrowRecord = Assert.Single(borrowRecords);
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
+        Assert.NotNull(page);
+        var borrowRecord = Assert.Single(page.Items);
 
         Assert.Equal(expectedDueDate, borrowRecord.DueDate);
         Assert.Equal(1, borrowRecord.RenewalCount);
@@ -856,7 +856,10 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     public async Task GetHistory_ReturnsActiveAndReturnedBorrowRecords()
     {
         using var client = factory.CreateApiClient();
-        var activeBookId = await SeedBookAsync(name: "History Active Book", stock: 2);
+        var activeBookId = await SeedBookAsync(
+            name: "History Active Book",
+            author: "History Active Author",
+            stock: 2);
         var returnedBookId = await SeedBookAsync(name: "History Returned Book", stock: 2);
         var returnedBorrowedAt = DateTime.UtcNow.AddDays(-3);
 
@@ -871,14 +874,22 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
 
-        Assert.NotNull(borrowRecords);
-        Assert.Equal(2, borrowRecords.Count);
-        Assert.Contains(borrowRecords, borrowRecord =>
+        Assert.NotNull(page);
+        Assert.Equal(1, page.Page);
+        Assert.Equal(20, page.PageSize);
+        Assert.Equal(2, page.TotalCount);
+        Assert.Equal(1, page.TotalPages);
+        Assert.Equal(2, page.Items.Count);
+
+        var activeBorrowRecord = Assert.Single(page.Items, borrowRecord =>
             borrowRecord.BookId == activeBookId &&
             borrowRecord.Status == nameof(BorrowStatus.Borrowed));
-        Assert.Contains(borrowRecords, borrowRecord =>
+        Assert.Equal("History Active Book", activeBorrowRecord.BookName);
+        Assert.Equal("History Active Author", activeBorrowRecord.Author);
+
+        Assert.Contains(page.Items, borrowRecord =>
             borrowRecord.BookId == returnedBookId &&
             borrowRecord.Status == nameof(BorrowStatus.Returned) &&
             borrowRecord.ReturnedAt is not null);
@@ -901,10 +912,10 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
 
-        Assert.NotNull(borrowRecords);
-        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.NotNull(page);
+        var borrowRecord = Assert.Single(page.Items);
         Assert.Equal(nameof(BorrowStatus.Overdue), borrowRecord.Status);
         Assert.Equal(4, borrowRecord.OverdueDays);
     }
@@ -923,10 +934,11 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
 
-        Assert.NotNull(borrowRecords);
-        var borrowRecord = Assert.Single(borrowRecords);
+        Assert.NotNull(page);
+        Assert.Equal(1, page.TotalCount);
+        var borrowRecord = Assert.Single(page.Items);
         Assert.Equal(currentUserBookId, borrowRecord.BookId);
     }
 
@@ -952,10 +964,81 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var borrowRecords = await response.Content.ReadFromJsonAsync<List<BorrowRecordResponse>>();
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
 
-        Assert.NotNull(borrowRecords);
-        Assert.Equal([newerBookId, olderBookId], borrowRecords.Select(borrowRecord => borrowRecord.BookId));
+        Assert.NotNull(page);
+        Assert.Equal([newerBookId, olderBookId], page.Items.Select(borrowRecord => borrowRecord.BookId));
+    }
+
+    [Fact]
+    public async Task GetHistory_WithPagination_ReturnsRequestedPageAndTotalCount()
+    {
+        using var client = factory.CreateApiClient();
+        var baseBorrowedAt = DateTime.UtcNow.Date.AddDays(-10);
+        var bookIds = new List<Guid>();
+
+        for (var index = 0; index < 5; index++)
+        {
+            var bookId = await SeedBookAsync(name: $"Paged History Book {index}", stock: 2);
+            bookIds.Add(bookId);
+
+            await SeedBorrowRecordAsync(
+                TestAuthenticationHandler.UserId,
+                bookId,
+                borrowedAt: baseBorrowedAt.AddDays(index));
+        }
+
+        var otherUserBookId = await SeedBookAsync(name: "Paged History Other User Book", stock: 2);
+        await SeedBorrowRecordAsync(
+            "history-pagination-other-user",
+            otherUserBookId,
+            borrowedAt: baseBorrowedAt.AddDays(6));
+
+        var response = await client.GetAsync("/api/borrow/history?page=2&pageSize=2");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
+
+        Assert.NotNull(page);
+        Assert.Equal(2, page.Page);
+        Assert.Equal(2, page.PageSize);
+        Assert.Equal(5, page.TotalCount);
+        Assert.Equal(3, page.TotalPages);
+        Assert.Equal([bookIds[2], bookIds[1]], page.Items.Select(item => item.BookId));
+        Assert.DoesNotContain(page.Items, item => item.BookId == otherUserBookId);
+    }
+
+    [Fact]
+    public async Task GetHistory_WithSameBorrowedAt_OrdersByIdAscending()
+    {
+        using var client = factory.CreateApiClient();
+        var firstRecordId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var secondRecordId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var firstBookId = await SeedBookAsync(name: "First Stable History Book", stock: 2);
+        var secondBookId = await SeedBookAsync(name: "Second Stable History Book", stock: 2);
+        var borrowedAt = DateTime.UtcNow.Date.AddDays(-2);
+
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            secondBookId,
+            id: secondRecordId,
+            borrowedAt: borrowedAt);
+        await SeedBorrowRecordAsync(
+            TestAuthenticationHandler.UserId,
+            firstBookId,
+            id: firstRecordId,
+            borrowedAt: borrowedAt);
+
+        var response = await client.GetAsync("/api/borrow/history");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await response.Content.ReadFromJsonAsync<PagedBorrowHistoryResponse>();
+
+        Assert.NotNull(page);
+        Assert.Equal([firstRecordId, secondRecordId], page.Items.Select(item => item.Id));
+        Assert.Equal([firstBookId, secondBookId], page.Items.Select(item => item.BookId));
     }
 
     [Fact]
@@ -1004,6 +1087,20 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         var response = await client.GetAsync("/api/borrow/history");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("/api/borrow/history?page=0")]
+    [InlineData("/api/borrow/history?pageSize=0")]
+    [InlineData("/api/borrow/history?pageSize=101")]
+    public async Task GetHistory_WithInvalidPagination_ReturnsBadRequest(string url)
+    {
+        using var client = factory.CreateApiClient();
+
+        var response = await client.GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]
@@ -1214,6 +1311,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     private async Task<Guid> SeedBorrowRecordAsync(
         string userId,
         Guid bookId,
+        Guid? id = null,
         DateTime? borrowedAt = null,
         DateTime? dueDate = null,
         int renewalCount = 0,
@@ -1223,7 +1321,7 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         var dbContext = scope.ServiceProvider.GetRequiredService<BorrowingDbContext>();
         var resolvedBorrowedAt = borrowedAt ?? DateTime.UtcNow.AddMinutes(-5);
         var borrowRecord = new BorrowRecord(
-            Guid.NewGuid(),
+            id ?? Guid.NewGuid(),
             userId,
             bookId,
             resolvedBorrowedAt,
@@ -1263,6 +1361,13 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         string Status,
         int RenewalCount,
         int OverdueDays);
+
+    private sealed record PagedBorrowHistoryResponse(
+        IReadOnlyList<BorrowRecordResponse> Items,
+        int Page,
+        int PageSize,
+        int TotalCount,
+        int TotalPages);
 
     private sealed record PagedOverdueBorrowRecordsResponse(
         IReadOnlyList<OverdueBorrowRecordResponse> Items,

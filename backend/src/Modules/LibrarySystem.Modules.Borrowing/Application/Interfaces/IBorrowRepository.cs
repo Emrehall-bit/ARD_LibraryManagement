@@ -14,8 +14,10 @@ public interface IBorrowRepository
         string userId,
         CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<BorrowRecord>> GetByUserIdAsync(
+    Task<BorrowRecordPage> GetPageByUserIdAsync(
         string userId,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default);
 
     Task<bool> HasOverdueBorrowsAsync(

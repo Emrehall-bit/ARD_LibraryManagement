@@ -36,16 +36,25 @@ internal sealed class BorrowRepository(BorrowingDbContext dbContext) : IBorrowRe
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<IReadOnlyList<BorrowRecord>> GetByUserIdAsync(
+    public async Task<BorrowRecordPage> GetPageByUserIdAsync(
         string userId,
+        int page,
+        int pageSize,
         CancellationToken cancellationToken = default)
     {
-        return await dbContext.BorrowRecords
+        var query = dbContext.BorrowRecords
             .AsNoTracking()
-            .Where(borrowRecord => borrowRecord.UserId == userId)
+            .Where(borrowRecord => borrowRecord.UserId == userId);
+
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
             .OrderByDescending(borrowRecord => borrowRecord.BorrowedAt)
             .ThenBy(borrowRecord => borrowRecord.Id)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
+
+        return new BorrowRecordPage(items, page, pageSize, totalCount);
     }
 
     public async Task<bool> HasOverdueBorrowsAsync(

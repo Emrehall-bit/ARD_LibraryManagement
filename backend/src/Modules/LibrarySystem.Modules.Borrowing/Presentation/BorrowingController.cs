@@ -66,12 +66,14 @@ public sealed class BorrowingController(IBorrowingService borrowingService) : Co
     }
 
     [HttpGet("history")]
-    [ProducesResponseType(typeof(IReadOnlyList<BorrowRecordResponseDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedBorrowHistoryResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
-    public async Task<ActionResult<IReadOnlyList<BorrowRecordResponseDto>>> GetHistory(
+    public async Task<ActionResult<PagedBorrowHistoryResponseDto>> GetHistory(
+        [FromQuery] GetBorrowHistoryQueryDto query,
         CancellationToken cancellationToken)
     {
-        var borrowRecords = await borrowingService.GetHistoryAsync(cancellationToken);
+        var borrowRecords = await borrowingService.GetHistoryAsync(query, cancellationToken);
 
         return Ok(borrowRecords);
     }

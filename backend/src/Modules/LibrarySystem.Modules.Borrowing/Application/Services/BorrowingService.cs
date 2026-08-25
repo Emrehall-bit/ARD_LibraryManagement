@@ -20,6 +20,7 @@ internal sealed class BorrowingService(
     IBorrowingTransactionCoordinator transactionCoordinator,
     IBookStockChangeNotifier bookStockChangeNotifier,
     ILogger<BorrowingService> logger,
+    IValidator<GetBorrowHistoryQueryDto> getBorrowHistoryQueryValidator,
     IValidator<GetOverdueBorrowRecordsQueryDto> getOverdueBorrowRecordsQueryValidator) : IBorrowingService
 {
     public async Task<BorrowRecordResponseDto> BorrowBookAsync(
@@ -162,20 +163,35 @@ internal sealed class BorrowingService(
         return MapToResponseDtos(borrowRecords, booksById);
     }
 
-    public async Task<IReadOnlyList<BorrowRecordResponseDto>> GetHistoryAsync(
+    public async Task<PagedBorrowHistoryResponseDto> GetHistoryAsync(
+        GetBorrowHistoryQueryDto query,
         CancellationToken cancellationToken = default)
     {
+        await getBorrowHistoryQueryValidator.ValidateAndThrowAsync(query, cancellationToken);
+
         var userId = GetCurrentUserId();
-        var borrowRecords = await borrowRepository.GetByUserIdAsync(userId, cancellationToken);
-        var bookIds = borrowRecords
+        var page = await borrowRepository.GetPageByUserIdAsync(
+            userId,
+            query.Page,
+            query.PageSize,
+            cancellationToken);
+        var bookIds = page.Items
             .Select(borrowRecord => borrowRecord.BookId)
             .Distinct()
             .ToArray();
 
         var books = await bookLookupService.GetByIdsAsync(bookIds, cancellationToken);
         var booksById = books.ToDictionary(book => book.Id);
+        var totalPages = page.TotalCount == 0
+            ? 0
+            : (int)Math.Ceiling(page.TotalCount / (double)page.PageSize);
 
-        return MapToResponseDtos(borrowRecords, booksById);
+        return new PagedBorrowHistoryResponseDto(
+            MapToResponseDtos(page.Items, booksById),
+            page.Page,
+            page.PageSize,
+            page.TotalCount,
+            totalPages);
     }
 
     public async Task<PagedOverdueBorrowRecordsResponseDto> GetOverdueAsync(

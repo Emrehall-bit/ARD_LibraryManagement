@@ -55,5 +55,15 @@
         </ng-template>
       </p-table>
     </div>
+
+    <p-paginator
+      [first]="(page() - 1) * pageSize()"
+      [rows]="pageSize()"
+      [totalRecords]="totalCount()"
+      [rowsPerPageOptions]="pageSizeOptions"
+      [showCurrentPageReport]="true"
+      currentPageReportTemplate="{first} - {last} / {totalRecords}"
+      (onPageChange)="handlePageChange($event)"
+    />
   }
 </section>
