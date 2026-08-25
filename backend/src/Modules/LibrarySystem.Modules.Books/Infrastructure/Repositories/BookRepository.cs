@@ -44,6 +44,7 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
     {
         return await dbContext.Books
             .AsNoTracking()
+            .Include(book => book.Images)
             .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
     }
 

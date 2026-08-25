@@ -26,9 +26,9 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
 
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
-    [ProducesResponseType(typeof(BookResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(BookDetailResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<BookResponseDto>> GetById(
+    public async Task<ActionResult<BookDetailResponseDto>> GetById(
         Guid id,
         CancellationToken cancellationToken)
     {

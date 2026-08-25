@@ -18,5 +18,17 @@ internal sealed class CreateBookRequestValidator : AbstractValidator<CreateBookR
 
         RuleFor(request => request.Category)
             .ApplyBookCategoryRules();
+
+        RuleFor(request => request.Description)
+            .ApplyBookDescriptionRules();
+
+        RuleFor(request => request.Isbn)
+            .ApplyBookIsbnRules();
+
+        RuleFor(request => request.Publisher)
+            .ApplyBookPublisherRules();
+
+        RuleFor(request => request.PublishedYear)
+            .ApplyBookPublishedYearRules();
     }
 }

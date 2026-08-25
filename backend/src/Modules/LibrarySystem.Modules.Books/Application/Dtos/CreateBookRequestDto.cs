@@ -4,4 +4,8 @@ public sealed record CreateBookRequestDto(
     string Name,
     string Author,
     int Stock,
-    string Category);
+    string Category,
+    string? Description = null,
+    string? Isbn = null,
+    string? Publisher = null,
+    int? PublishedYear = null);

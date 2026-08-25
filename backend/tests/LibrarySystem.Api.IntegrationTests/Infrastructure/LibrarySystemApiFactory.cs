@@ -89,6 +89,7 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
         command.CommandText = """
             TRUNCATE TABLE
                 borrowing.borrow_records,
+                books.book_images,
                 books.books,
                 identity."AspNetUserTokens",
                 identity."AspNetUserLogins",

@@ -8,7 +8,7 @@ public interface IBookService
         GetBooksQueryDto query,
         CancellationToken cancellationToken = default);
 
-    Task<BookResponseDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
+    Task<BookDetailResponseDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<BookResponseDto> CreateAsync(CreateBookRequestDto request, CancellationToken cancellationToken = default);
 

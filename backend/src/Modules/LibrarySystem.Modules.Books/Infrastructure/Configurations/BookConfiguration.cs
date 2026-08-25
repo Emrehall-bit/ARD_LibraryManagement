@@ -1,4 +1,5 @@
 using LibrarySystem.Modules.Books.Domain;
+using LibrarySystem.Modules.Books.Application.Validators;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -39,5 +40,20 @@ internal sealed class BookConfiguration : IEntityTypeConfiguration<Book>
             .HasMaxLength(64)
             .HasDefaultValue(BookCategory.Other)
             .IsRequired();
+
+        builder.Property(book => book.Description)
+            .HasColumnName("description")
+            .HasMaxLength(BookValidationRules.DescriptionMaxLength);
+
+        builder.Property(book => book.Isbn)
+            .HasColumnName("isbn")
+            .HasMaxLength(BookValidationRules.IsbnMaxLength);
+
+        builder.Property(book => book.Publisher)
+            .HasColumnName("publisher")
+            .HasMaxLength(BookValidationRules.PublisherMaxLength);
+
+        builder.Property(book => book.PublishedYear)
+            .HasColumnName("published_year");
     }
 }

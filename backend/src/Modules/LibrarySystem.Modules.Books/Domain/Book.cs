@@ -12,6 +12,20 @@ public sealed class Book
     }
 
     public Book(Guid id, string name, string author, int stock, BookCategory category)
+        : this(id, name, author, stock, category, null, null, null, null)
+    {
+    }
+
+    public Book(
+        Guid id,
+        string name,
+        string author,
+        int stock,
+        BookCategory category,
+        string? description,
+        string? isbn,
+        string? publisher,
+        int? publishedYear)
     {
         if (id == Guid.Empty)
         {
@@ -19,7 +33,7 @@ public sealed class Book
         }
 
         Id = id;
-        Update(name, author, stock, category);
+        Update(name, author, stock, category, description, isbn, publisher, publishedYear);
     }
 
     public Guid Id { get; private set; }
@@ -32,12 +46,35 @@ public sealed class Book
 
     public BookCategory Category { get; private set; } = BookCategory.Other;
 
+    public string? Description { get; private set; }
+
+    public string? Isbn { get; private set; }
+
+    public string? Publisher { get; private set; }
+
+    public int? PublishedYear { get; private set; }
+
+    public List<BookImage> Images { get; private set; } = [];
+
     public void Update(string name, string author, int stock)
     {
         Update(name, author, stock, Category);
     }
 
     public void Update(string name, string author, int stock, BookCategory category)
+    {
+        Update(name, author, stock, category, Description, Isbn, Publisher, PublishedYear);
+    }
+
+    public void Update(
+        string name,
+        string author,
+        int stock,
+        BookCategory category,
+        string? description,
+        string? isbn,
+        string? publisher,
+        int? publishedYear)
     {
         if (string.IsNullOrWhiteSpace(name))
         {
@@ -58,6 +95,10 @@ public sealed class Book
         Author = author.Trim();
         Stock = stock;
         Category = category;
+        Description = NormalizeOptionalText(description);
+        Isbn = NormalizeOptionalText(isbn);
+        Publisher = NormalizeOptionalText(publisher);
+        PublishedYear = publishedYear;
     }
 
     public void DecreaseStock()
@@ -73,5 +114,12 @@ public sealed class Book
     public void IncreaseStock()
     {
         Stock++;
+    }
+
+    private static string? NormalizeOptionalText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? null
+            : value.Trim();
     }
 }

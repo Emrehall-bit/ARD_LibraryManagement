@@ -1,6 +1,6 @@
 namespace LibrarySystem.Modules.Books.Application.Dtos;
 
-public sealed record BookResponseDto(
+public sealed record BookDetailResponseDto(
     Guid Id,
     string Name,
     string Author,
@@ -9,4 +9,5 @@ public sealed record BookResponseDto(
     string? Description,
     string? Isbn,
     string? Publisher,
-    int? PublishedYear);
+    int? PublishedYear,
+    IReadOnlyList<BookImageResponseDto> Images);

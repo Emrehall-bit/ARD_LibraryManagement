@@ -42,11 +42,11 @@ internal sealed class BookService(
             totalPages);
     }
 
-    public async Task<BookResponseDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public async Task<BookDetailResponseDto> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var book = await GetBookOrThrowAsync(id, cancellationToken);
 
-        return MapToResponseDto(book);
+        return MapToDetailResponseDto(book);
     }
 
     public async Task<BookResponseDto> CreateAsync(
@@ -60,7 +60,11 @@ internal sealed class BookService(
             request.Name,
             request.Author,
             request.Stock,
-            ParseCategory(request.Category));
+            ParseCategory(request.Category),
+            request.Description,
+            request.Isbn,
+            request.Publisher,
+            request.PublishedYear);
 
         await bookRepository.AddAsync(book, cancellationToken);
         await bookRepository.SaveChangesAsync(cancellationToken);
@@ -77,7 +81,15 @@ internal sealed class BookService(
 
         var book = await GetTrackedBookOrThrowAsync(id, cancellationToken);
 
-        book.Update(request.Name, request.Author, request.Stock, ParseCategory(request.Category));
+        book.Update(
+            request.Name,
+            request.Author,
+            request.Stock,
+            ParseCategory(request.Category),
+            request.Description,
+            request.Isbn,
+            request.Publisher,
+            request.PublishedYear);
         await bookRepository.SaveChangesAsync(cancellationToken);
 
         return MapToResponseDto(book);
@@ -129,6 +141,39 @@ internal sealed class BookService(
             book.Name,
             book.Author,
             book.Stock,
-            book.Category.ToString());
+            book.Category.ToString(),
+            book.Description,
+            book.Isbn,
+            book.Publisher,
+            book.PublishedYear);
+    }
+
+    private static BookDetailResponseDto MapToDetailResponseDto(Book book)
+    {
+        return new BookDetailResponseDto(
+            book.Id,
+            book.Name,
+            book.Author,
+            book.Stock,
+            book.Category.ToString(),
+            book.Description,
+            book.Isbn,
+            book.Publisher,
+            book.PublishedYear,
+            book.Images
+                .OrderByDescending(image => image.IsCover)
+                .ThenBy(image => image.SortOrder)
+                .ThenBy(image => image.Id)
+                .Select(MapToImageResponseDto)
+                .ToList());
+    }
+
+    private static BookImageResponseDto MapToImageResponseDto(BookImage image)
+    {
+        return new BookImageResponseDto(
+            image.Id,
+            image.ObjectName,
+            image.IsCover,
+            image.SortOrder);
     }
 }

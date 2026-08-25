@@ -7,6 +7,8 @@ public sealed class BooksDbContext(DbContextOptions<BooksDbContext> options) : D
 {
     public DbSet<Book> Books => Set<Book>();
 
+    public DbSet<BookImage> BookImages => Set<BookImage>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.HasDefaultSchema("books");

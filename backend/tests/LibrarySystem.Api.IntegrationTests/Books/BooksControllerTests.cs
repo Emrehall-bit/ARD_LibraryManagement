@@ -758,6 +758,63 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task CreateBook_WithOptionalMetadata_ReturnsCreatedAndPersistsMetadata()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest(
+            "Clean Architecture",
+            "Robert C. Martin",
+            4,
+            nameof(BookCategory.Science),
+            "Architecture guidance for software systems.",
+            "978-0134494166",
+            "Prentice Hall",
+            2017);
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var book = await response.Content.ReadFromJsonAsync<BookResponse>();
+
+        Assert.NotNull(book);
+        Assert.Equal(request.Description, book.Description);
+        Assert.Equal(request.Isbn, book.Isbn);
+        Assert.Equal(request.Publisher, book.Publisher);
+        Assert.Equal(request.PublishedYear, book.PublishedYear);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var storedBook = await dbContext.Books
+            .AsNoTracking()
+            .SingleAsync(storedBook => storedBook.Id == book.Id);
+
+        Assert.Equal(request.Description, storedBook.Description);
+        Assert.Equal(request.Isbn, storedBook.Isbn);
+        Assert.Equal(request.Publisher, storedBook.Publisher);
+        Assert.Equal(request.PublishedYear, storedBook.PublishedYear);
+    }
+
+    [Fact]
+    public async Task CreateBook_WithNullMetadata_ReturnsNullMetadata()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Null Metadata Book", "Optional Author", 2);
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var book = await response.Content.ReadFromJsonAsync<BookResponse>();
+
+        Assert.NotNull(book);
+        Assert.Null(book.Description);
+        Assert.Null(book.Isbn);
+        Assert.Null(book.Publisher);
+        Assert.Null(book.PublishedYear);
+    }
+
+    [Fact]
     public async Task CreateBook_WithInvalidCategory_ReturnsBadRequest()
     {
         using var client = factory.CreateApiClient();
@@ -796,6 +853,63 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task GetBookById_WithMetadataAndImages_ReturnsDetailContractWithDeterministicImageOrder()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(
+            client,
+            new CreateBookRequest(
+                "Image Detail Book",
+                "Detail Author",
+                3,
+                nameof(BookCategory.Science),
+                "A richly illustrated book.",
+                "978-0000000001",
+                "Gallery Press",
+                DateTime.UtcNow.Year));
+        var firstGalleryImageId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var secondGalleryImageId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var coverImageId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+
+        await SeedBookImageAsync(secondGalleryImageId, createdBook.Id, "books/gallery-later.webp", false, 1);
+        await SeedBookImageAsync(coverImageId, createdBook.Id, $"books/{createdBook.Id}/cover.webp", true, 99);
+        await SeedBookImageAsync(firstGalleryImageId, createdBook.Id, "books/gallery-first.webp", false, 1);
+
+        var response = await client.GetAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var book = await response.Content.ReadFromJsonAsync<BookDetailResponse>();
+
+        Assert.NotNull(book);
+        Assert.Equal(createdBook.Description, book.Description);
+        Assert.Equal(createdBook.Isbn, book.Isbn);
+        Assert.Equal(createdBook.Publisher, book.Publisher);
+        Assert.Equal(createdBook.PublishedYear, book.PublishedYear);
+        Assert.Equal(
+            [coverImageId, firstGalleryImageId, secondGalleryImageId],
+            book.Images.Select(image => image.Id).ToList());
+        Assert.True(book.Images[0].IsCover);
+    }
+
+    [Fact]
+    public async Task GetBooks_DoesNotReturnImageMetadataForListItems()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync("List Contract Book", "List Author", 2);
+        await SeedBookImageAsync(Guid.NewGuid(), bookId, $"books/{bookId}/cover.webp", true, 0);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using var content = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
+        var item = content.RootElement.GetProperty("items")[0];
+
+        Assert.False(item.TryGetProperty("images", out _));
+    }
+
+    [Fact]
     public async Task DeleteBook_WithExistingBook_ReturnsNoContentAndThenGetReturnsNotFound()
     {
         using var client = factory.CreateApiClient();
@@ -811,11 +925,72 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task DeleteBook_WithImages_CascadesImageMetadataDelete()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        await SeedBookImageAsync(Guid.NewGuid(), createdBook.Id, $"books/{createdBook.Id}/cover.webp", true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), createdBook.Id, $"books/{createdBook.Id}/gallery/001.webp", false, 1);
+
+        var deleteResponse = await client.DeleteAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var imageCount = await dbContext.BookImages.CountAsync(image => image.BookId == createdBook.Id);
+
+        Assert.Equal(0, imageCount);
+    }
+
+    [Fact]
+    public async Task BookImage_WithValidValues_PersistsMetadata()
+    {
+        var bookId = await SeedBookAsync("Image Persistence Book", "Image Author", 2);
+        var imageId = Guid.NewGuid();
+
+        await SeedBookImageAsync(imageId, bookId, $"books/{bookId}/cover.webp", true, 0);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var image = await dbContext.BookImages
+            .AsNoTracking()
+            .SingleAsync(image => image.Id == imageId);
+
+        Assert.Equal(bookId, image.BookId);
+        Assert.Equal($"books/{bookId}/cover.webp", image.ObjectName);
+        Assert.True(image.IsCover);
+        Assert.Equal(0, image.SortOrder);
+    }
+
+    [Fact]
+    public async Task BookImage_WithMultipleCoverImagesForBook_IsRejectedByDatabase()
+    {
+        var bookId = await SeedBookAsync("Unique Cover Book", "Image Author", 2);
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+        await dbContext.BookImages.AddRangeAsync(
+            new BookImage(Guid.NewGuid(), bookId, $"books/{bookId}/cover-1.webp", true, 0),
+            new BookImage(Guid.NewGuid(), bookId, $"books/{bookId}/cover-2.webp", true, 1));
+
+        await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
+    }
+
+    [Fact]
     public async Task UpdateBook_WithValidRequest_ReturnsOkAndUpdatesBook()
     {
         using var client = factory.CreateApiClient();
         var createdBook = await CreateBookAsync(client);
-        var request = new UpdateBookRequest("Refactoring", "Martin Fowler", 5, nameof(BookCategory.Science));
+        var request = new UpdateBookRequest(
+            "Refactoring",
+            "Martin Fowler",
+            5,
+            nameof(BookCategory.Science),
+            "Improving the design of existing code.",
+            "978-0201485677",
+            "Addison-Wesley",
+            1999);
 
         var response = await client.PutAsJsonAsync($"/api/books/{createdBook.Id}", request);
 
@@ -829,6 +1004,10 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(request.Author, updatedBook.Author);
         Assert.Equal(request.Stock, updatedBook.Stock);
         Assert.Equal(request.Category, updatedBook.Category);
+        Assert.Equal(request.Description, updatedBook.Description);
+        Assert.Equal(request.Isbn, updatedBook.Isbn);
+        Assert.Equal(request.Publisher, updatedBook.Publisher);
+        Assert.Equal(request.PublishedYear, updatedBook.PublishedYear);
 
         using var scope = factory.Services.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
@@ -840,6 +1019,72 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal(request.Author, storedBook.Author);
         Assert.Equal(request.Stock, storedBook.Stock);
         Assert.Equal(BookCategory.Science, storedBook.Category);
+        Assert.Equal(request.Description, storedBook.Description);
+        Assert.Equal(request.Isbn, storedBook.Isbn);
+        Assert.Equal(request.Publisher, storedBook.Publisher);
+        Assert.Equal(request.PublishedYear, storedBook.PublishedYear);
+    }
+
+    [Fact]
+    public async Task CreateBook_WithInvalidDescriptionLength_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Long Description", "Author", 1, Description: new string('x', 4001));
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task CreateBook_WithInvalidPublisherLength_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Long Publisher", "Author", 1, Publisher: new string('x', 201));
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task CreateBook_WithInvalidIsbnLength_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Long ISBN", "Author", 1, Isbn: new string('1', 33));
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public async Task CreateBook_WithInvalidPublishedYear_ReturnsBadRequest(int publishedYear)
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Invalid Year", "Author", 1, PublishedYear: publishedYear);
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task CreateBook_WithFuturePublishedYear_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var request = new CreateBookRequest("Future Year", "Author", 1, PublishedYear: DateTime.UtcNow.Year + 1);
+
+        var response = await client.PostAsJsonAsync("/api/books", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]
@@ -947,9 +1192,11 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
-    private static async Task<BookResponse> CreateBookAsync(HttpClient client)
+    private static async Task<BookResponse> CreateBookAsync(
+        HttpClient client,
+        CreateBookRequest? request = null)
     {
-        var request = new CreateBookRequest("Clean Code", "Robert C. Martin", 3);
+        request ??= new CreateBookRequest("Clean Code", "Robert C. Martin", 3);
         var response = await client.PostAsJsonAsync("/api/books", request);
 
         response.EnsureSuccessStatusCode();
@@ -967,7 +1214,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         }
     }
 
-    private async Task SeedBookAsync(
+    private async Task<Guid> SeedBookAsync(
         string name,
         string author,
         int stock,
@@ -978,6 +1225,23 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         var book = new Book(Guid.NewGuid(), name, author, stock, category);
 
         await dbContext.Books.AddAsync(book);
+        await dbContext.SaveChangesAsync();
+
+        return book.Id;
+    }
+
+    private async Task SeedBookImageAsync(
+        Guid id,
+        Guid bookId,
+        string objectName,
+        bool isCover,
+        int sortOrder)
+    {
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var image = new BookImage(id, bookId, objectName, isCover, sortOrder);
+
+        await dbContext.BookImages.AddAsync(image);
         await dbContext.SaveChangesAsync();
     }
 
@@ -1070,15 +1334,50 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         string Name,
         string Author,
         int Stock,
-        string Category = nameof(BookCategory.Novel));
+        string Category = nameof(BookCategory.Novel),
+        string? Description = null,
+        string? Isbn = null,
+        string? Publisher = null,
+        int? PublishedYear = null);
 
     private sealed record UpdateBookRequest(
         string Name,
         string Author,
         int Stock,
-        string Category = nameof(BookCategory.Novel));
+        string Category = nameof(BookCategory.Novel),
+        string? Description = null,
+        string? Isbn = null,
+        string? Publisher = null,
+        int? PublishedYear = null);
 
-    private sealed record BookResponse(Guid Id, string Name, string Author, int Stock, string Category);
+    private sealed record BookResponse(
+        Guid Id,
+        string Name,
+        string Author,
+        int Stock,
+        string Category,
+        string? Description,
+        string? Isbn,
+        string? Publisher,
+        int? PublishedYear);
+
+    private sealed record BookDetailResponse(
+        Guid Id,
+        string Name,
+        string Author,
+        int Stock,
+        string Category,
+        string? Description,
+        string? Isbn,
+        string? Publisher,
+        int? PublishedYear,
+        IReadOnlyList<BookImageResponse> Images);
+
+    private sealed record BookImageResponse(
+        Guid Id,
+        string ObjectName,
+        bool IsCover,
+        int SortOrder);
 
     private sealed record PagedBooksResponse(
         IReadOnlyList<BookResponse> Items,
