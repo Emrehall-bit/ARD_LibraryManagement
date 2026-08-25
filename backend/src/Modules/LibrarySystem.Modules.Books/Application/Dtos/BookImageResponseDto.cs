@@ -2,6 +2,6 @@ namespace LibrarySystem.Modules.Books.Application.Dtos;
 
 public sealed record BookImageResponseDto(
     Guid Id,
-    string ObjectName,
+    string Url,
     bool IsCover,
     int SortOrder);

@@ -1,6 +1,7 @@
 using LibrarySystem.Modules.Books.Application.Dtos;
 using LibrarySystem.Modules.Books.Application.Interfaces;
 using LibrarySystem.Shared.Authentication;
+using LibrarySystem.Shared.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -72,6 +73,72 @@ public sealed class BooksController(IBookService bookService) : ControllerBase
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         await bookService.DeleteAsync(id, cancellationToken);
+
+        return NoContent();
+    }
+
+    [HttpPost("{bookId:guid}/images")]
+    [Authorize(Roles = IdentityRoles.Admin)]
+    [Consumes("multipart/form-data")]
+    [ProducesResponseType(typeof(BookImageResponseDto), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BookImageResponseDto>> UploadImage(
+        Guid bookId,
+        [FromForm] IFormFile file,
+        [FromForm] bool isCover,
+        [FromForm] int? sortOrder,
+        CancellationToken cancellationToken)
+    {
+        if (file is null)
+        {
+            throw new BusinessException("Image file is required.");
+        }
+
+        await using var stream = file.OpenReadStream();
+        var image = await bookService.UploadImageAsync(
+            bookId,
+            new UploadBookImageRequestDto(
+                stream,
+                file.ContentType,
+                file.Length,
+                isCover,
+                sortOrder),
+            cancellationToken);
+
+        return CreatedAtAction(nameof(GetById), new { id = bookId }, image);
+    }
+
+    [HttpPut("{bookId:guid}/images/{imageId:guid}/cover")]
+    [Authorize(Roles = IdentityRoles.Admin)]
+    [ProducesResponseType(typeof(BookImageResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BookImageResponseDto>> SetCover(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken)
+    {
+        var image = await bookService.SetCoverAsync(bookId, imageId, cancellationToken);
+
+        return Ok(image);
+    }
+
+    [HttpDelete("{bookId:guid}/images/{imageId:guid}")]
+    [Authorize(Roles = IdentityRoles.Admin)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> DeleteImage(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken)
+    {
+        await bookService.DeleteImageAsync(bookId, imageId, cancellationToken);
 
         return NoContent();
     }

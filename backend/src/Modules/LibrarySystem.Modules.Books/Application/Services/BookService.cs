@@ -1,13 +1,17 @@
 using FluentValidation;
+using LibrarySystem.Modules.Books.Application.Contracts;
 using LibrarySystem.Modules.Books.Application.Dtos;
 using LibrarySystem.Modules.Books.Application.Interfaces;
 using LibrarySystem.Modules.Books.Domain;
 using LibrarySystem.Shared.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace LibrarySystem.Modules.Books.Application.Services;
 
 internal sealed class BookService(
     IBookRepository bookRepository,
+    IBookImageStorage bookImageStorage,
+    ILogger<BookService> logger,
     IValidator<GetBooksQueryDto> getBooksQueryValidator,
     IValidator<CreateBookRequestDto> createBookRequestValidator,
     IValidator<UpdateBookRequestDto> updateBookRequestValidator) : IBookService
@@ -46,7 +50,7 @@ internal sealed class BookService(
     {
         var book = await GetBookOrThrowAsync(id, cancellationToken);
 
-        return MapToDetailResponseDto(book);
+        return await MapToDetailResponseDtoAsync(book, cancellationToken);
     }
 
     public async Task<BookResponseDto> CreateAsync(
@@ -97,10 +101,94 @@ internal sealed class BookService(
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var book = await GetBookOrThrowAsync(id, cancellationToken);
+        var book = await GetTrackedBookWithImagesOrThrowAsync(id, cancellationToken);
+        var objectNames = book.Images
+            .Select(image => image.ObjectName)
+            .ToList();
 
         await bookRepository.DeleteAsync(book, cancellationToken);
         await bookRepository.SaveChangesAsync(cancellationToken);
+
+        foreach (var objectName in objectNames)
+        {
+            await DeleteStorageObjectBestEffortAsync(objectName, cancellationToken);
+        }
+    }
+
+    public async Task<BookImageResponseDto> UploadImageAsync(
+        Guid bookId,
+        UploadBookImageRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        _ = await GetTrackedBookOrThrowAsync(bookId, cancellationToken);
+
+        var imageCount = await bookRepository.CountImagesByBookIdAsync(bookId, cancellationToken);
+        if (imageCount >= BookImagePolicy.MaxImagesPerBook)
+        {
+            throw new BusinessException("Book image limit has been reached.");
+        }
+
+        ValidateUploadRequest(request);
+
+        var imageId = Guid.NewGuid();
+        var objectName = CreateObjectName(bookId, imageId, request.ContentType);
+        var makeCover = request.IsCover || imageCount == 0;
+        var sortOrder = request.SortOrder ?? imageCount;
+        var image = new BookImage(imageId, bookId, objectName, makeCover, sortOrder);
+
+        await bookImageStorage.UploadAsync(
+            objectName,
+            request.Content,
+            request.ContentType,
+            request.Size,
+            cancellationToken);
+
+        try
+        {
+            await bookRepository.AddImageAsync(image, makeCover, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            await DeleteUploadedObjectAfterFailureAsync(objectName, exception, cancellationToken);
+            throw;
+        }
+
+        return await MapToImageResponseDtoAsync(image, cancellationToken);
+    }
+
+    public async Task<BookImageResponseDto> SetCoverAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default)
+    {
+        var image = await bookRepository.GetImageByIdAndBookIdAsync(bookId, imageId, cancellationToken);
+        if (image is null)
+        {
+            throw new NotFoundException("Book image not found.");
+        }
+
+        if (!await bookRepository.SetCoverAsync(bookId, imageId, cancellationToken))
+        {
+            throw new NotFoundException("Book image not found.");
+        }
+
+        image.SetCover(true);
+
+        return await MapToImageResponseDtoAsync(image, cancellationToken);
+    }
+
+    public async Task DeleteImageAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default)
+    {
+        var image = await bookRepository.DeleteImageAsync(bookId, imageId, cancellationToken);
+        if (image is null)
+        {
+            throw new NotFoundException("Book image not found.");
+        }
+
+        await DeleteStorageObjectBestEffortAsync(image.ObjectName, cancellationToken);
     }
 
     private static string NormalizeQueryValue(string value)
@@ -134,6 +222,13 @@ internal sealed class BookService(
         return book ?? throw new NotFoundException($"Book with id '{id}' was not found.");
     }
 
+    private async Task<Book> GetTrackedBookWithImagesOrThrowAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var book = await bookRepository.GetTrackedByIdWithImagesAsync(id, cancellationToken);
+
+        return book ?? throw new NotFoundException($"Book with id '{id}' was not found.");
+    }
+
     private static BookResponseDto MapToResponseDto(Book book)
     {
         return new BookResponseDto(
@@ -148,8 +243,19 @@ internal sealed class BookService(
             book.PublishedYear);
     }
 
-    private static BookDetailResponseDto MapToDetailResponseDto(Book book)
+    private async Task<BookDetailResponseDto> MapToDetailResponseDtoAsync(
+        Book book,
+        CancellationToken cancellationToken)
     {
+        var images = new List<BookImageResponseDto>();
+        foreach (var image in book.Images
+            .OrderByDescending(image => image.IsCover)
+            .ThenBy(image => image.SortOrder)
+            .ThenBy(image => image.Id))
+        {
+            images.Add(await MapToImageResponseDtoAsync(image, cancellationToken));
+        }
+
         return new BookDetailResponseDto(
             book.Id,
             book.Name,
@@ -160,20 +266,99 @@ internal sealed class BookService(
             book.Isbn,
             book.Publisher,
             book.PublishedYear,
-            book.Images
-                .OrderByDescending(image => image.IsCover)
-                .ThenBy(image => image.SortOrder)
-                .ThenBy(image => image.Id)
-                .Select(MapToImageResponseDto)
-                .ToList());
+            images);
     }
 
-    private static BookImageResponseDto MapToImageResponseDto(BookImage image)
+    private async Task<BookImageResponseDto> MapToImageResponseDtoAsync(
+        BookImage image,
+        CancellationToken cancellationToken)
     {
+        var url = await bookImageStorage.GetReadUrlAsync(
+            image.ObjectName,
+            BookImageStorageDefaults.DefaultReadUrlExpiry,
+            cancellationToken);
+
         return new BookImageResponseDto(
             image.Id,
-            image.ObjectName,
+            url,
             image.IsCover,
             image.SortOrder);
+    }
+
+    private static void ValidateUploadRequest(UploadBookImageRequestDto request)
+    {
+        if (request.Content is null)
+        {
+            throw new BusinessException("Image file is required.");
+        }
+
+        if (request.Size == 0)
+        {
+            throw new BusinessException("Image file is empty.");
+        }
+
+        if (request.Size > BookImagePolicy.MaxImageSizeBytes)
+        {
+            throw new BusinessException("Image file exceeds the maximum allowed size.");
+        }
+
+        if (!BookImagePolicy.SupportedContentTypes.Contains(request.ContentType))
+        {
+            throw new BusinessException("Unsupported image content type.");
+        }
+
+        if (request.SortOrder < 0)
+        {
+            throw new BusinessException("Sort order cannot be negative.");
+        }
+    }
+
+    private static string CreateObjectName(Guid bookId, Guid imageId, string contentType)
+    {
+        var extension = contentType.ToLowerInvariant() switch
+        {
+            "image/jpeg" => "jpg",
+            "image/png" => "png",
+            "image/webp" => "webp",
+            _ => throw new BusinessException("Unsupported image content type.")
+        };
+
+        return $"books/{bookId}/{imageId:N}.{extension}";
+    }
+
+    private async Task DeleteUploadedObjectAfterFailureAsync(
+        string objectName,
+        Exception originalException,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await bookImageStorage.DeleteAsync(objectName, cancellationToken);
+        }
+        catch (Exception cleanupException)
+        {
+            logger.LogWarning(
+                cleanupException,
+                "Failed to delete uploaded book image object '{ObjectName}' after database failure: {FailureType}.",
+                objectName,
+                originalException.GetType().Name);
+        }
+    }
+
+    private async Task DeleteStorageObjectBestEffortAsync(
+        string objectName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await bookImageStorage.DeleteAsync(objectName, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed to delete book image object '{ObjectName}' from storage after database commit.",
+                objectName);
+        }
     }
 }

@@ -18,4 +18,19 @@ public interface IBookService
         CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<BookImageResponseDto> UploadImageAsync(
+        Guid bookId,
+        UploadBookImageRequestDto request,
+        CancellationToken cancellationToken = default);
+
+    Task<BookImageResponseDto> SetCoverAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default);
+
+    Task DeleteImageAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default);
 }

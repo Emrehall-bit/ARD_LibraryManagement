@@ -54,6 +54,131 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
             .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
     }
 
+    public async Task<Book?> GetTrackedByIdWithImagesAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.Books
+            .Include(book => book.Images)
+            .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
+    }
+
+    public async Task<int> CountImagesByBookIdAsync(Guid bookId, CancellationToken cancellationToken = default)
+    {
+        return await dbContext.BookImages
+            .AsNoTracking()
+            .CountAsync(image => image.BookId == bookId, cancellationToken);
+    }
+
+    public async Task<BookImage?> GetImageByIdAndBookIdAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default)
+    {
+        return await dbContext.BookImages
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                image =>
+                    image.BookId == bookId &&
+                    image.Id == imageId,
+                cancellationToken);
+    }
+
+    public async Task AddImageAsync(
+        BookImage image,
+        bool makeCover,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        if (makeCover)
+        {
+            await dbContext.BookImages
+                .Where(existingImage =>
+                    existingImage.BookId == image.BookId &&
+                    existingImage.IsCover)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(existingImage => existingImage.IsCover, false),
+                    cancellationToken);
+        }
+
+        await dbContext.BookImages.AddAsync(image, cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task<bool> SetCoverAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var selectedImage = await dbContext.BookImages
+            .FirstOrDefaultAsync(
+                image =>
+                    image.BookId == bookId &&
+                    image.Id == imageId,
+                cancellationToken);
+
+        if (selectedImage is null)
+        {
+            return false;
+        }
+
+        if (selectedImage.IsCover)
+        {
+            return true;
+        }
+
+        await dbContext.BookImages
+            .Where(image =>
+                image.BookId == bookId &&
+                image.IsCover)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(image => image.IsCover, false),
+                cancellationToken);
+
+        selectedImage.SetCover(true);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        return true;
+    }
+
+    public async Task<BookImage?> DeleteImageAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var images = await dbContext.BookImages
+            .Where(image => image.BookId == bookId)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .ToListAsync(cancellationToken);
+        var image = images.FirstOrDefault(image => image.Id == imageId);
+
+        if (image is null)
+        {
+            return null;
+        }
+
+        dbContext.BookImages.Remove(image);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        if (image.IsCover)
+        {
+            var nextCover = images.FirstOrDefault(nextImage => nextImage.Id != imageId);
+            if (nextCover is not null)
+            {
+                nextCover.SetCover(true);
+                await dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+
+        return image;
+    }
+
     public async Task AddAsync(Book book, CancellationToken cancellationToken = default)
     {
         await dbContext.Books.AddAsync(book, cancellationToken);

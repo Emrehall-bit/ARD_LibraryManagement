@@ -1,4 +1,5 @@
 using FluentValidation;
+using LibrarySystem.Modules.Books.Application.Contracts;
 using LibrarySystem.Shared.Exceptions;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
@@ -46,6 +47,12 @@ internal sealed class GlobalExceptionHandler(
                 Status = StatusCodes.Status404NotFound,
                 Title = "Resource not found.",
                 Detail = notFoundException.Message
+            },
+            ObjectStorageException objectStorageException => new ProblemDetails
+            {
+                Status = StatusCodes.Status503ServiceUnavailable,
+                Title = "Object storage unavailable.",
+                Detail = objectStorageException.Message
             },
             _ => new ProblemDetails
             {

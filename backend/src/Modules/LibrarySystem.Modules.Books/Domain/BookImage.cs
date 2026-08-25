@@ -44,4 +44,9 @@ public sealed class BookImage
     public bool IsCover { get; private set; }
 
     public int SortOrder { get; private set; }
+
+    public void SetCover(bool isCover)
+    {
+        IsCover = isCover;
+    }
 }

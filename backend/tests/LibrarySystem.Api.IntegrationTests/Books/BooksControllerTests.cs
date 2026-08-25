@@ -3,13 +3,18 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
+using LibrarySystem.Modules.Books.Application.Interfaces;
+using LibrarySystem.Modules.Books.Application.Models;
 using LibrarySystem.Modules.Books.Domain;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Identity.Domain;
 using LibrarySystem.Shared.Authentication;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace LibrarySystem.Api.IntegrationTests.Books;
 
@@ -890,6 +895,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
             [coverImageId, firstGalleryImageId, secondGalleryImageId],
             book.Images.Select(image => image.Id).ToList());
         Assert.True(book.Images[0].IsCover);
+        Assert.All(book.Images, image => Assert.StartsWith("https://storage.example.test/", image.Url));
     }
 
     [Fact]
@@ -975,6 +981,378 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
             new BookImage(Guid.NewGuid(), bookId, $"books/{bookId}/cover-2.webp", true, 1));
 
         await Assert.ThrowsAsync<DbUpdateException>(() => dbContext.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task UploadImage_WithoutAuthentication_ReturnsUnauthorized()
+    {
+        using var authenticatedClient = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(authenticatedClient);
+        using var anonymousClient = factory.CreateUnauthenticatedApiClient();
+        using var form = CreateImageUploadContent();
+
+        var response = await anonymousClient.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadImage_WithMemberRole_ReturnsForbidden()
+    {
+        using var adminClient = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(adminClient);
+        using var memberClient = await CreateAuthenticatedJwtClientAsync(IdentityRoles.Member);
+        using var form = CreateImageUploadContent();
+
+        var response = await memberClient.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadImage_WithAdminRole_UploadsObjectAndCreatesMetadata()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        using var form = CreateImageUploadContent(contentType: "image/png", length: 128, isCover: false, sortOrder: 3);
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var image = await response.Content.ReadFromJsonAsync<BookImageResponse>();
+
+        Assert.NotNull(image);
+        Assert.True(image.IsCover);
+        Assert.Equal(3, image.SortOrder);
+        Assert.StartsWith("https://storage.example.test/", image.Url);
+
+        var upload = Assert.Single(factory.BookImageStorage.Uploads);
+        Assert.StartsWith($"books/{createdBook.Id}/", upload.ObjectName);
+        Assert.EndsWith(".png", upload.ObjectName);
+        Assert.Equal("image/png", upload.ContentType);
+        Assert.Equal(128, upload.Size);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var storedImage = await dbContext.BookImages.SingleAsync(storedImage => storedImage.Id == image.Id);
+
+        Assert.Equal(upload.ObjectName, storedImage.ObjectName);
+        Assert.True(storedImage.IsCover);
+        Assert.Equal(3, storedImage.SortOrder);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(BookImagePolicy.MaxImageSizeBytes + 1)]
+    public async Task UploadImage_WithInvalidSize_ReturnsBadRequest(long length)
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        using var form = CreateImageUploadContent(length: length);
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.BookImageStorage.Uploads);
+    }
+
+    [Fact]
+    public async Task UploadImage_WithInvalidContentType_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        using var form = CreateImageUploadContent(contentType: "text/plain");
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.BookImageStorage.Uploads);
+    }
+
+    [Fact]
+    public async Task UploadImage_WithNegativeSortOrder_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        using var form = CreateImageUploadContent(sortOrder: -1);
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.BookImageStorage.Uploads);
+    }
+
+    [Fact]
+    public async Task UploadImage_WhenBookAlreadyHasFiveImages_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        for (var index = 0; index < BookImagePolicy.MaxImagesPerBook; index++)
+        {
+            await SeedBookImageAsync(
+                Guid.NewGuid(),
+                createdBook.Id,
+                $"books/{createdBook.Id}/seed-{index}.webp",
+                index == 0,
+                index);
+        }
+
+        using var form = CreateImageUploadContent();
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Empty(factory.BookImageStorage.Uploads);
+    }
+
+    [Fact]
+    public async Task UploadImage_WithExplicitCover_ReplacesExistingCover()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var existingCoverId = Guid.NewGuid();
+        await SeedBookImageAsync(
+            existingCoverId,
+            createdBook.Id,
+            $"books/{createdBook.Id}/existing-cover.webp",
+            true,
+            0);
+        using var form = CreateImageUploadContent(isCover: true, sortOrder: 1);
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+
+        var image = await response.Content.ReadFromJsonAsync<BookImageResponse>();
+
+        Assert.NotNull(image);
+        Assert.True(image.IsCover);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var existingCover = await dbContext.BookImages.SingleAsync(storedImage => storedImage.Id == existingCoverId);
+        var newCover = await dbContext.BookImages.SingleAsync(storedImage => storedImage.Id == image.Id);
+
+        Assert.False(existingCover.IsCover);
+        Assert.True(newCover.IsCover);
+    }
+
+    [Fact]
+    public async Task UploadImage_WhenDatabaseInsertFails_DeletesUploadedObjectBestEffort()
+    {
+        using var setupClient = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(setupClient);
+        using var customFactory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                services.RemoveAll<IBookRepository>();
+                services.AddScoped<IBookRepository, FailingImageSaveBookRepository>();
+            });
+        });
+        using var client = customFactory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+        client.DefaultRequestHeaders.Add(TestAuthenticationHandler.HeaderName, TestAuthenticationHandler.UserName);
+        using var form = CreateImageUploadContent();
+
+        var response = await client.PostAsync($"/api/books/{createdBook.Id}/images", form);
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+
+        var upload = Assert.Single(factory.BookImageStorage.Uploads);
+        Assert.Equal([upload.ObjectName], factory.BookImageStorage.Deletes);
+    }
+
+    [Fact]
+    public async Task GetBookById_WithImages_ReturnsPresignedImageUrlsWithoutRawSecrets()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        await SeedBookImageAsync(
+            Guid.NewGuid(),
+            createdBook.Id,
+            $"books/{createdBook.Id}/cover.webp",
+            true,
+            0);
+
+        var response = await client.GetAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var book = await response.Content.ReadFromJsonAsync<BookDetailResponse>();
+
+        Assert.NotNull(book);
+        var image = Assert.Single(book.Images);
+        Assert.StartsWith("https://storage.example.test/", image.Url);
+        Assert.Contains("expires=900", image.Url);
+        Assert.DoesNotContain("minioadmin", image.Url, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SetCover_WithAdminRole_SetsRequestedImageAsCover()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var existingCoverId = Guid.NewGuid();
+        var selectedImageId = Guid.NewGuid();
+        await SeedBookImageAsync(existingCoverId, createdBook.Id, "books/existing-cover.webp", true, 0);
+        await SeedBookImageAsync(selectedImageId, createdBook.Id, "books/selected-cover.webp", false, 1);
+
+        var response = await client.PutAsync($"/api/books/{createdBook.Id}/images/{selectedImageId}/cover", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var image = await response.Content.ReadFromJsonAsync<BookImageResponse>();
+
+        Assert.NotNull(image);
+        Assert.Equal(selectedImageId, image.Id);
+        Assert.True(image.IsCover);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+        Assert.False((await dbContext.BookImages.SingleAsync(storedImage => storedImage.Id == existingCoverId)).IsCover);
+        Assert.True((await dbContext.BookImages.SingleAsync(storedImage => storedImage.Id == selectedImageId)).IsCover);
+    }
+
+    [Fact]
+    public async Task SetCover_WhenImageAlreadyCover_ReturnsSuccess()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var coverId = Guid.NewGuid();
+        await SeedBookImageAsync(coverId, createdBook.Id, "books/existing-cover.webp", true, 0);
+
+        var response = await client.PutAsync($"/api/books/{createdBook.Id}/images/{coverId}/cover", null);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetCover_WithWrongBook_ReturnsNotFound()
+    {
+        using var client = factory.CreateApiClient();
+        var firstBook = await CreateBookAsync(client);
+        var secondBook = await CreateBookAsync(client, new CreateBookRequest("Other Book", "Other Author", 1));
+        var imageId = Guid.NewGuid();
+        await SeedBookImageAsync(imageId, firstBook.Id, "books/first-cover.webp", true, 0);
+
+        var response = await client.PutAsync($"/api/books/{secondBook.Id}/images/{imageId}/cover", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteImage_WithAdminRole_RemovesMetadataAndDeletesStorageObject()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var imageId = Guid.NewGuid();
+        var objectName = $"books/{createdBook.Id}/delete-me.webp";
+        await SeedBookImageAsync(imageId, createdBook.Id, objectName, false, 0);
+
+        var response = await client.DeleteAsync($"/api/books/{createdBook.Id}/images/{imageId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+        var exists = await dbContext.BookImages.AnyAsync(image => image.Id == imageId);
+
+        Assert.False(exists);
+        Assert.Equal([objectName], factory.BookImageStorage.Deletes);
+    }
+
+    [Fact]
+    public async Task DeleteImage_WhenCoverDeleted_SelectsNextImageAsCover()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var coverId = Guid.NewGuid();
+        var laterImageId = Guid.NewGuid();
+        var nextCoverId = Guid.NewGuid();
+        await SeedBookImageAsync(coverId, createdBook.Id, "books/cover.webp", true, 0);
+        await SeedBookImageAsync(laterImageId, createdBook.Id, "books/later.webp", false, 2);
+        await SeedBookImageAsync(nextCoverId, createdBook.Id, "books/next.webp", false, 1);
+
+        var response = await client.DeleteAsync($"/api/books/{createdBook.Id}/images/{coverId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+        Assert.True((await dbContext.BookImages.SingleAsync(image => image.Id == nextCoverId)).IsCover);
+        Assert.False((await dbContext.BookImages.SingleAsync(image => image.Id == laterImageId)).IsCover);
+    }
+
+    [Fact]
+    public async Task DeleteImage_WhenLastImageDeleted_LeavesNoCover()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var imageId = Guid.NewGuid();
+        await SeedBookImageAsync(imageId, createdBook.Id, "books/only.webp", true, 0);
+
+        var response = await client.DeleteAsync($"/api/books/{createdBook.Id}/images/{imageId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        using var scope = factory.Services.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<BooksDbContext>();
+
+        Assert.False(await dbContext.BookImages.AnyAsync(image => image.BookId == createdBook.Id && image.IsCover));
+    }
+
+    [Fact]
+    public async Task DeleteImage_WithWrongBook_ReturnsNotFound()
+    {
+        using var client = factory.CreateApiClient();
+        var firstBook = await CreateBookAsync(client);
+        var secondBook = await CreateBookAsync(client, new CreateBookRequest("Delete Other Book", "Other Author", 1));
+        var imageId = Guid.NewGuid();
+        await SeedBookImageAsync(imageId, firstBook.Id, "books/first.webp", true, 0);
+
+        var response = await client.DeleteAsync($"/api/books/{secondBook.Id}/images/{imageId}");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteBook_WithImages_CleansUpStorageObjectsAfterDatabaseCommit()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        var firstObjectName = $"books/{createdBook.Id}/cover.webp";
+        var secondObjectName = $"books/{createdBook.Id}/gallery.webp";
+        await SeedBookImageAsync(Guid.NewGuid(), createdBook.Id, firstObjectName, true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), createdBook.Id, secondObjectName, false, 1);
+
+        var response = await client.DeleteAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal([firstObjectName, secondObjectName], factory.BookImageStorage.Deletes);
+    }
+
+    [Fact]
+    public async Task DeleteBook_WhenStorageCleanupFails_StillDeletesBook()
+    {
+        using var client = factory.CreateApiClient();
+        var createdBook = await CreateBookAsync(client);
+        await SeedBookImageAsync(Guid.NewGuid(), createdBook.Id, $"books/{createdBook.Id}/cover.webp", true, 0);
+        factory.BookImageStorage.ThrowOnDelete = true;
+
+        var response = await client.DeleteAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        var getResponse = await client.GetAsync($"/api/books/{createdBook.Id}");
+
+        Assert.Equal(HttpStatusCode.NotFound, getResponse.StatusCode);
+        Assert.Single(factory.BookImageStorage.Deletes);
     }
 
     [Fact]
@@ -1245,6 +1623,28 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         await dbContext.SaveChangesAsync();
     }
 
+    private static MultipartFormDataContent CreateImageUploadContent(
+        string contentType = "image/webp",
+        long length = 64,
+        bool isCover = false,
+        int? sortOrder = null)
+    {
+        var form = new MultipartFormDataContent();
+        var bytes = new byte[checked((int)length)];
+        var fileContent = new ByteArrayContent(bytes);
+
+        fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(fileContent, "file", "upload.bin");
+        form.Add(new StringContent(isCover.ToString()), "isCover");
+
+        if (sortOrder is not null)
+        {
+            form.Add(new StringContent(sortOrder.Value.ToString()), "sortOrder");
+        }
+
+        return form;
+    }
+
     private static async Task<PagedBooksResponse> ReadPagedBooksResponseAsync(HttpResponseMessage response)
     {
         return await response.Content.ReadFromJsonAsync<PagedBooksResponse>()
@@ -1375,7 +1775,7 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
 
     private sealed record BookImageResponse(
         Guid Id,
-        string ObjectName,
+        string Url,
         bool IsCover,
         int SortOrder);
 
@@ -1393,4 +1793,94 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     private sealed record AuthResponse(string AccessToken, int ExpiresIn, string TokenType);
 
     private sealed record UserCredentials(string Username, string Email, string Password);
+
+    private sealed class FailingImageSaveBookRepository(BooksDbContext dbContext) : IBookRepository
+    {
+        public Task<BookPage> GetPageAsync(
+            int page,
+            int pageSize,
+            string? search,
+            string sortBy,
+            string sortDirection,
+            string stockStatus,
+            BookCategory? category,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public async Task<Book?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await dbContext.Books
+                .AsNoTracking()
+                .Include(book => book.Images)
+                .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
+        }
+
+        public async Task<Book?> GetTrackedByIdAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await dbContext.Books.FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
+        }
+
+        public async Task<Book?> GetTrackedByIdWithImagesAsync(Guid id, CancellationToken cancellationToken = default)
+        {
+            return await dbContext.Books
+                .Include(book => book.Images)
+                .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
+        }
+
+        public async Task<int> CountImagesByBookIdAsync(Guid bookId, CancellationToken cancellationToken = default)
+        {
+            return await dbContext.BookImages.CountAsync(image => image.BookId == bookId, cancellationToken);
+        }
+
+        public Task<BookImage?> GetImageByIdAndBookIdAsync(
+            Guid bookId,
+            Guid imageId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task AddImageAsync(
+            BookImage image,
+            bool makeCover,
+            CancellationToken cancellationToken = default)
+        {
+            throw new InvalidOperationException("Simulated image metadata insert failure.");
+        }
+
+        public Task<bool> SetCoverAsync(
+            Guid bookId,
+            Guid imageId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<BookImage?> DeleteImageAsync(
+            Guid bookId,
+            Guid imageId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public async Task AddAsync(Book book, CancellationToken cancellationToken = default)
+        {
+            await dbContext.Books.AddAsync(book, cancellationToken);
+        }
+
+        public Task DeleteAsync(Book book, CancellationToken cancellationToken = default)
+        {
+            dbContext.Books.Remove(book);
+
+            return Task.CompletedTask;
+        }
+
+        public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+    }
 }

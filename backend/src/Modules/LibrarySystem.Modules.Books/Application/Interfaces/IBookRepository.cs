@@ -19,6 +19,30 @@ public interface IBookRepository
 
     Task<Book?> GetTrackedByIdAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<Book?> GetTrackedByIdWithImagesAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<int> CountImagesByBookIdAsync(Guid bookId, CancellationToken cancellationToken = default);
+
+    Task<BookImage?> GetImageByIdAndBookIdAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default);
+
+    Task AddImageAsync(
+        BookImage image,
+        bool makeCover,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> SetCoverAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default);
+
+    Task<BookImage?> DeleteImageAsync(
+        Guid bookId,
+        Guid imageId,
+        CancellationToken cancellationToken = default);
+
     Task AddAsync(Book book, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Book book, CancellationToken cancellationToken = default);

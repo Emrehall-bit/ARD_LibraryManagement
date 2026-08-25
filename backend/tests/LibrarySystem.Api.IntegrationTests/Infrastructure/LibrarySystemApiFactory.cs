@@ -1,4 +1,5 @@
 using System.Text.Json;
+using LibrarySystem.Modules.Books.Application.Contracts;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
@@ -26,6 +27,8 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
     private readonly string connectionString = CreateTestConnectionString();
 
     public TestBookStockChangeNotifier BookStockChangeNotifications { get; } = new();
+
+    public TestBookImageStorage BookImageStorage { get; } = new();
 
     public LibrarySystemApiFactory()
     {
@@ -81,6 +84,7 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
     public async Task ResetDataAsync()
     {
         BookStockChangeNotifications.Reset();
+        BookImageStorage.Reset();
 
         await using var connection = new NpgsqlConnection(connectionString);
         await connection.OpenAsync();
@@ -127,6 +131,7 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
             services.RemoveAll<DbContextOptions<IdentityDbContext>>();
             services.RemoveAll<IdentityDbContext>();
             services.RemoveAll<IBookStockChangeNotifier>();
+            services.RemoveAll<IBookImageStorage>();
 
             services.AddDbContext<BooksDbContext>(options =>
                 options.UseNpgsql(connectionString, npgsqlOptions =>
@@ -150,6 +155,7 @@ public sealed class LibrarySystemApiFactory : WebApplicationFactory<Program>, IA
                 }));
 
             services.AddSingleton<IBookStockChangeNotifier>(BookStockChangeNotifications);
+            services.AddSingleton<IBookImageStorage>(BookImageStorage);
 
             services
                 .AddAuthentication(options =>
