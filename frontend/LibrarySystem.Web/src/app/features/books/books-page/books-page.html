@@ -178,9 +178,19 @@
           <p-card styleClass="book-card app-card-surface">
             <ng-template #content>
               <article class="book-card__content">
-                <div class="book-cover {{ getCoverClass(book) }}">
-                  <span>{{ book.name }}</span>
-                </div>
+                @if (hasUsableCoverImage(book)) {
+                  <div class="book-cover book-cover--image">
+                    <img
+                      [src]="book.coverImageUrl ?? ''"
+                      [alt]="getCoverAltText(book)"
+                      (error)="markCoverImageAsBroken(book.id)"
+                    />
+                  </div>
+                } @else {
+                  <div class="book-cover {{ getCoverClass(book) }}">
+                    <span>{{ book.name }}</span>
+                  </div>
+                }
 
                 <div class="book-card__body">
                   <h2>{{ book.name }}</h2>

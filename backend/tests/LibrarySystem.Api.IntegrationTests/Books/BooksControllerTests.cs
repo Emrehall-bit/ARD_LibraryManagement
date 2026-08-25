@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using LibrarySystem.Api.IntegrationTests.Infrastructure;
+using LibrarySystem.Modules.Books.Application.Contracts;
 using LibrarySystem.Modules.Books.Application.Interfaces;
 using LibrarySystem.Modules.Books.Application.Models;
 using LibrarySystem.Modules.Books.Domain;
@@ -916,6 +917,166 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
     }
 
     [Fact]
+    public async Task GetBooks_WithCoverImage_ReturnsCoverImageUrl()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync("Cover List Book", "Cover Author", 2);
+        var objectName = $"books/{bookId}/cover.webp";
+        await SeedBookImageAsync(Guid.NewGuid(), bookId, objectName, true, 0);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal($"https://storage.example.test/{Uri.EscapeDataString(objectName)}?expires=900", book.CoverImageUrl);
+
+        var readUrlRequest = Assert.Single(factory.BookImageStorage.ReadUrlRequests);
+        Assert.Equal(objectName, readUrlRequest.ObjectName);
+        Assert.Equal(BookImageStorageDefaults.DefaultReadUrlExpiry, readUrlRequest.Expiry);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithoutCoverImage_ReturnsNullCoverImageUrl()
+    {
+        using var client = factory.CreateApiClient();
+        await SeedBookAsync("No Cover Book", "Cover Author", 2);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Null(book.CoverImageUrl);
+        Assert.Empty(factory.BookImageStorage.ReadUrlRequests);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithOnlyGalleryImage_ReturnsNullCoverImageUrl()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync("Gallery Only Book", "Gallery Author", 2);
+        await SeedBookImageAsync(Guid.NewGuid(), bookId, $"books/{bookId}/gallery.webp", false, 0);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Null(book.CoverImageUrl);
+        Assert.Empty(factory.BookImageStorage.ReadUrlRequests);
+    }
+
+    [Fact]
+    public async Task GetBooks_WithCoverAndGalleryImage_UsesOnlyCoverImage()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync("Cover And Gallery Book", "Gallery Author", 2);
+        var coverObjectName = $"books/{bookId}/cover.webp";
+        var galleryObjectName = $"books/{bookId}/gallery.webp";
+        await SeedBookImageAsync(Guid.NewGuid(), bookId, galleryObjectName, false, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), bookId, coverObjectName, true, 1);
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var responseBody = await response.Content.ReadAsStringAsync();
+        var page = JsonSerializer.Deserialize<PagedBooksResponse>(
+                responseBody,
+                new JsonSerializerOptions(JsonSerializerDefaults.Web))
+            ?? throw new InvalidOperationException("Paged books response body was empty.");
+        var book = Assert.Single(page.Items);
+
+        Assert.Contains(Uri.EscapeDataString(coverObjectName), book.CoverImageUrl);
+        Assert.DoesNotContain(Uri.EscapeDataString(galleryObjectName), book.CoverImageUrl);
+        Assert.Equal([coverObjectName], factory.BookImageStorage.ReadUrlRequests.Select(request => request.ObjectName));
+
+        using var content = JsonDocument.Parse(responseBody);
+        var item = content.RootElement.GetProperty("items")[0];
+
+        Assert.False(item.TryGetProperty("images", out _));
+    }
+
+    [Fact]
+    public async Task GetBooks_CoverLookupUsesOnlyCurrentPageBookIds()
+    {
+        using var client = factory.CreateApiClient();
+        var firstBookId = await SeedBookAsync("Alpha Cover", "Author", 1);
+        var secondBookId = await SeedBookAsync("Bravo Cover", "Author", 1);
+        var thirdBookId = await SeedBookAsync("Charlie Cover", "Author", 1);
+        var firstObjectName = $"books/{firstBookId}/cover.webp";
+        var secondObjectName = $"books/{secondBookId}/cover.webp";
+        var thirdObjectName = $"books/{thirdBookId}/cover.webp";
+        await SeedBookImageAsync(Guid.NewGuid(), firstBookId, firstObjectName, true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), secondBookId, secondObjectName, true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), thirdBookId, thirdObjectName, true, 0);
+
+        var response = await client.GetAsync("/api/books?page=2&pageSize=1&sortBy=name&sortDirection=asc");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Equal(secondBookId, book.Id);
+        Assert.Contains(Uri.EscapeDataString(secondObjectName), book.CoverImageUrl);
+        Assert.Equal([secondObjectName], factory.BookImageStorage.ReadUrlRequests.Select(request => request.ObjectName));
+        Assert.DoesNotContain(firstObjectName, factory.BookImageStorage.ReadUrlRequests.Select(request => request.ObjectName));
+        Assert.DoesNotContain(thirdObjectName, factory.BookImageStorage.ReadUrlRequests.Select(request => request.ObjectName));
+    }
+
+    [Fact]
+    public async Task GetBooks_WhenCoverUrlGenerationFails_ReturnsOkWithNullCoverImageUrl()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync("Storage Fallback Book", "Storage Author", 2);
+        var objectName = $"books/{bookId}/cover.webp";
+        await SeedBookImageAsync(Guid.NewGuid(), bookId, objectName, true, 0);
+        factory.BookImageStorage.ThrowOnGetReadUrl = true;
+
+        var response = await client.GetAsync("/api/books?page=1&pageSize=10");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var page = await ReadPagedBooksResponseAsync(response);
+        var book = Assert.Single(page.Items);
+
+        Assert.Null(book.CoverImageUrl);
+        Assert.Equal([objectName], factory.BookImageStorage.ReadUrlRequests.Select(request => request.ObjectName));
+    }
+
+    [Fact]
+    public async Task BookRepository_GetCoverObjectNamesByBookIdsAsync_ReturnsRequestedCoversInSingleContract()
+    {
+        var firstBookId = await SeedBookAsync("Repository Cover A", "Author", 1);
+        var secondBookId = await SeedBookAsync("Repository Cover B", "Author", 1);
+        var outsideBookId = await SeedBookAsync("Repository Cover C", "Author", 1);
+        var firstObjectName = $"books/{firstBookId}/cover.webp";
+        var secondObjectName = $"books/{secondBookId}/cover.webp";
+        await SeedBookImageAsync(Guid.NewGuid(), firstBookId, firstObjectName, true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), secondBookId, secondObjectName, true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), outsideBookId, $"books/{outsideBookId}/cover.webp", true, 0);
+        await SeedBookImageAsync(Guid.NewGuid(), firstBookId, $"books/{firstBookId}/gallery.webp", false, 1);
+
+        using var scope = factory.Services.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<IBookRepository>();
+
+        var covers = await repository.GetCoverObjectNamesByBookIdsAsync([firstBookId, secondBookId]);
+
+        Assert.Equal(2, covers.Count);
+        Assert.Equal(firstObjectName, covers[firstBookId]);
+        Assert.Equal(secondObjectName, covers[secondBookId]);
+        Assert.False(covers.ContainsKey(outsideBookId));
+    }
+
+    [Fact]
     public async Task DeleteBook_WithExistingBook_ReturnsNoContentAndThenGetReturnsNotFound()
     {
         using var client = factory.CreateApiClient();
@@ -1759,7 +1920,8 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
         string? Description,
         string? Isbn,
         string? Publisher,
-        int? PublishedYear);
+        int? PublishedYear,
+        string? CoverImageUrl);
 
     private sealed record BookDetailResponse(
         Guid Id,
@@ -1827,6 +1989,16 @@ public sealed class BooksControllerTests(LibrarySystemApiFactory factory) : IAsy
             return await dbContext.Books
                 .Include(book => book.Images)
                 .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
+        }
+
+        public async Task<IReadOnlyDictionary<Guid, string>> GetCoverObjectNamesByBookIdsAsync(
+            IReadOnlyCollection<Guid> bookIds,
+            CancellationToken cancellationToken = default)
+        {
+            return await dbContext.BookImages
+                .AsNoTracking()
+                .Where(image => bookIds.Contains(image.BookId) && image.IsCover)
+                .ToDictionaryAsync(image => image.BookId, image => image.ObjectName, cancellationToken);
         }
 
         public async Task<int> CountImagesByBookIdAsync(Guid bookId, CancellationToken cancellationToken = default)

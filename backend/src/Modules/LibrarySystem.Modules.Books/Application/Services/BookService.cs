@@ -37,9 +37,16 @@ internal sealed class BookService(
         var totalPages = page.TotalCount == 0
             ? 0
             : (int)Math.Ceiling(page.TotalCount / (double)page.PageSize);
+        var coverImageUrls = await GetCoverImageUrlsByBookIdsAsync(
+            page.Items.Select(book => book.Id).ToList(),
+            cancellationToken);
 
         return new PagedBooksResponseDto(
-            page.Items.Select(MapToResponseDto).ToList(),
+            page.Items
+                .Select(book => MapToResponseDto(
+                    book,
+                    coverImageUrls.GetValueOrDefault(book.Id)))
+                .ToList(),
             page.Page,
             page.PageSize,
             page.TotalCount,
@@ -73,7 +80,7 @@ internal sealed class BookService(
         await bookRepository.AddAsync(book, cancellationToken);
         await bookRepository.SaveChangesAsync(cancellationToken);
 
-        return MapToResponseDto(book);
+        return MapToResponseDto(book, coverImageUrl: null);
     }
 
     public async Task<BookResponseDto> UpdateAsync(
@@ -96,7 +103,7 @@ internal sealed class BookService(
             request.PublishedYear);
         await bookRepository.SaveChangesAsync(cancellationToken);
 
-        return MapToResponseDto(book);
+        return MapToResponseDto(book, coverImageUrl: null);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -229,7 +236,7 @@ internal sealed class BookService(
         return book ?? throw new NotFoundException($"Book with id '{id}' was not found.");
     }
 
-    private static BookResponseDto MapToResponseDto(Book book)
+    private static BookResponseDto MapToResponseDto(Book book, string? coverImageUrl)
     {
         return new BookResponseDto(
             book.Id,
@@ -240,7 +247,51 @@ internal sealed class BookService(
             book.Description,
             book.Isbn,
             book.Publisher,
-            book.PublishedYear);
+            book.PublishedYear,
+            coverImageUrl);
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, string>> GetCoverImageUrlsByBookIdsAsync(
+        IReadOnlyCollection<Guid> bookIds,
+        CancellationToken cancellationToken)
+    {
+        var coverObjectNames = await bookRepository.GetCoverObjectNamesByBookIdsAsync(bookIds, cancellationToken);
+        var coverImageUrls = new Dictionary<Guid, string>();
+
+        foreach (var (bookId, objectName) in coverObjectNames)
+        {
+            var url = await TryGetCoverImageUrlAsync(bookId, objectName, cancellationToken);
+            if (url is not null)
+            {
+                coverImageUrls[bookId] = url;
+            }
+        }
+
+        return coverImageUrls;
+    }
+
+    private async Task<string?> TryGetCoverImageUrlAsync(
+        Guid bookId,
+        string objectName,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await bookImageStorage.GetReadUrlAsync(
+                objectName,
+                BookImageStorageDefaults.DefaultReadUrlExpiry,
+                cancellationToken);
+        }
+        catch (ObjectStorageException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Failed to create cover image URL for book '{BookId}' and object '{ObjectName}'.",
+                bookId,
+                objectName);
+
+            return null;
+        }
     }
 
     private async Task<BookDetailResponseDto> MapToDetailResponseDtoAsync(

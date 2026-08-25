@@ -9,4 +9,5 @@ public sealed record BookResponseDto(
     string? Description,
     string? Isbn,
     string? Publisher,
-    int? PublishedYear);
+    int? PublishedYear,
+    string? CoverImageUrl);

@@ -4,6 +4,7 @@ export interface Book {
   author: string;
   stock: number;
   category: BookCategory;
+  coverImageUrl: string | null;
 }
 
 export type BookCategory =

@@ -61,6 +61,21 @@ internal sealed class BookRepository(BooksDbContext dbContext) : IBookRepository
             .FirstOrDefaultAsync(book => book.Id == id, cancellationToken);
     }
 
+    public async Task<IReadOnlyDictionary<Guid, string>> GetCoverObjectNamesByBookIdsAsync(
+        IReadOnlyCollection<Guid> bookIds,
+        CancellationToken cancellationToken = default)
+    {
+        if (bookIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        return await dbContext.BookImages
+            .AsNoTracking()
+            .Where(image => bookIds.Contains(image.BookId) && image.IsCover)
+            .ToDictionaryAsync(image => image.BookId, image => image.ObjectName, cancellationToken);
+    }
+
     public async Task<int> CountImagesByBookIdAsync(Guid bookId, CancellationToken cancellationToken = default)
     {
         return await dbContext.BookImages

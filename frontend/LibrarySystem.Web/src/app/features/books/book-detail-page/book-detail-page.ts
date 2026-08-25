@@ -19,7 +19,7 @@ import { BORROWING_POLICY } from '../../borrowing/borrowing-policy';
 import { BorrowingApiService } from '../../borrowing/services/borrowing-api.service';
 import { getBookCategoryLabel } from '../book-category-options';
 import { BookDetail } from '../models/book-detail.model';
-import { Book, BookCategory } from '../models/book.model';
+import { BookCategory } from '../models/book.model';
 import { BooksApiService } from '../services/books-api.service';
 
 type StockSeverity = 'success' | 'danger';
@@ -103,7 +103,7 @@ export class BookDetailPageComponent implements OnInit {
     this.loadBorrowEligibility();
   }
 
-  protected getCoverClass(book: Book): string {
+  protected getCoverClass(book: BookDetail): string {
     const source = `${book.id}${book.name}`;
     const hash = Array.from(source).reduce((total, character) => total + character.charCodeAt(0), 0);
 

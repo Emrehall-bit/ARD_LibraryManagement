@@ -21,6 +21,10 @@ public interface IBookRepository
 
     Task<Book?> GetTrackedByIdWithImagesAsync(Guid id, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyDictionary<Guid, string>> GetCoverObjectNamesByBookIdsAsync(
+        IReadOnlyCollection<Guid> bookIds,
+        CancellationToken cancellationToken = default);
+
     Task<int> CountImagesByBookIdAsync(Guid bookId, CancellationToken cancellationToken = default);
 
     Task<BookImage?> GetImageByIdAndBookIdAsync(

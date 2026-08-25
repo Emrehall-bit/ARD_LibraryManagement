@@ -104,6 +104,7 @@ export class BooksPageComponent implements OnInit {
   private readonly allowedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
   protected readonly books = signal<Book[]>([]);
+  protected readonly brokenCoverBookIds = signal<ReadonlySet<string>>(new Set());
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly searchTerm = signal('');
@@ -359,6 +360,18 @@ export class BooksPageComponent implements OnInit {
     return `book-cover--${this.coverTones[hash % this.coverTones.length]}`;
   }
 
+  protected hasUsableCoverImage(book: Book): boolean {
+    return !!book.coverImageUrl && !this.brokenCoverBookIds().has(book.id);
+  }
+
+  protected markCoverImageAsBroken(bookId: string): void {
+    this.brokenCoverBookIds.update((bookIds) => new Set(bookIds).add(bookId));
+  }
+
+  protected getCoverAltText(book: Book): string {
+    return `${book.name} kapak görseli`;
+  }
+
   protected getStockLabel(stock: number): string {
     return stock > 0 ? `${stock} stokta` : 'Stokta yok';
   }
@@ -476,6 +489,7 @@ export class BooksPageComponent implements OnInit {
           this.shouldSetImageCover.set(false);
           this.clearImageFileInput();
           this.loadBookImages();
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
@@ -504,6 +518,7 @@ export class BooksPageComponent implements OnInit {
             detail: 'Kapak görseli güncellendi.'
           });
           this.loadBookImages();
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
@@ -807,6 +822,7 @@ export class BooksPageComponent implements OnInit {
             detail: 'Görsel silindi.'
           });
           this.loadBookImages();
+          this.loadCurrentPage();
         },
         error: (error: unknown) => {
           this.imageErrorMessage.set(this.getImageOperationErrorMessage(error));
@@ -835,6 +851,7 @@ export class BooksPageComponent implements OnInit {
           this.pageSize.set(response.pageSize);
           this.totalCount.set(response.totalCount);
           this.totalPages.set(response.totalPages);
+          this.brokenCoverBookIds.set(new Set());
         },
         error: () => {
           this.errorMessage.set('Kitaplar yüklenirken bir hata oluştu.');
