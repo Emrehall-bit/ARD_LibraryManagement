@@ -6,6 +6,9 @@
 # dotenv files
 .env
 
+# Local MinIO object storage data
+data/minio/
+
 # User-specific files
 *.rsuser
 *.suo

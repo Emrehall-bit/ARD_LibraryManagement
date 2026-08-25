@@ -3,6 +3,7 @@ using LibrarySystem.Api.AdminDashboard;
 using LibrarySystem.Api.Hubs;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Books.Infrastructure.Seeding;
+using LibrarySystem.Modules.Books.Infrastructure.Storage;
 using LibrarySystem.Modules.Borrowing.Application.Interfaces;
 using LibrarySystem.Modules.Borrowing.Infrastructure;
 using LibrarySystem.Modules.Identity.Infrastructure;
@@ -79,6 +80,7 @@ var databaseConnectionString = builder.Configuration.GetConnectionString("Librar
     ?? throw new InvalidOperationException("Connection string 'LibrarySystemDatabase' is not configured.");
 
 builder.Services.AddBooksInfrastructure(databaseConnectionString);
+builder.Services.AddBookImageStorage(builder.Configuration);
 builder.Services.AddBorrowingInfrastructure(databaseConnectionString);
 builder.Services.AddIdentityInfrastructure(databaseConnectionString, builder.Configuration);
 builder.Services.AddScoped<IBookStockChangeNotifier, SignalRBookStockChangeNotifier>();
@@ -87,6 +89,7 @@ builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 var app = builder.Build();
 
 await app.Services.SeedIdentityAsync();
+await app.Services.EnsureBookImageStorageAsync();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
