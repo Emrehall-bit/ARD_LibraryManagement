@@ -1,5 +1,6 @@
 using LibrarySystem.Api.ExceptionHandling;
 using LibrarySystem.Api.AdminDashboard;
+using LibrarySystem.Api.Configuration;
 using LibrarySystem.Api.Hubs;
 using LibrarySystem.Modules.Books.Infrastructure;
 using LibrarySystem.Modules.Books.Infrastructure.Seeding;
@@ -12,6 +13,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi;
 
 const string AngularDevelopmentCorsPolicy = "AngularDevelopment";
+
+DotEnvLoader.LoadNearest();
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -87,6 +90,11 @@ builder.Services.AddScoped<IBookStockChangeNotifier, SignalRBookStockChangeNotif
 builder.Services.AddScoped<IAdminDashboardService, AdminDashboardService>();
 
 var app = builder.Build();
+
+if (app.Configuration.GetValue<bool>("Database:ApplyMigrationsOnStartup"))
+{
+    await app.Services.MigrateDatabasesAsync();
+}
 
 await app.Services.SeedIdentityAsync();
 await app.Services.EnsureBookImageStorageAsync();

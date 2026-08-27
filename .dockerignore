@@ -1,0 +1,13 @@
+.git
+.agents
+.codex
+data
+**/bin
+**/obj
+**/node_modules
+**/.angular
+**/dist
+**/coverage
+**/.vs
+**/.idea
+**/.vscode

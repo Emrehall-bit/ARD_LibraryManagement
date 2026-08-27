@@ -8,6 +8,7 @@
 
 # Local MinIO object storage data
 data/minio/
+data/postgres/
 
 # User-specific files
 *.rsuser

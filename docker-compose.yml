@@ -1,4 +1,20 @@
 services:
+  db:
+    image: postgres:17-alpine
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-library_system}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   minio:
     image: quay.io/minio/minio:latest
     command: server /data --console-address ":9001"
@@ -6,7 +22,64 @@ services:
       - "9000:9000"
       - "9001:9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-change-this-local-password}
     volumes:
       - ./data/minio:/data
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/src/LibrarySystem.Api/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-5074}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__LibrarySystemDatabase: Host=db;Port=5432;Database=${POSTGRES_DB:-library_system};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      Database__ApplyMigrationsOnStartup: "true"
+      Cors__AllowedOrigins__0: http://localhost:${FRONTEND_PORT:-4200}
+      Cors__AllowedOrigins__1: http://127.0.0.1:${FRONTEND_PORT:-4200}
+      Jwt__Issuer: LibrarySystem.Api
+      Jwt__Audience: LibrarySystem.Api
+      Jwt__Key: ${JWT_KEY:-library-system-local-dev-jwt-key-32-chars}
+      Jwt__ExpirationMinutes: ${JWT_EXPIRATION_MINUTES:-60}
+      Minio__Endpoint: minio:9000
+      Minio__PublicEndpoint: localhost:9000
+      Minio__AccessKey: ${MINIO_ROOT_USER:-minioadmin}
+      Minio__SecretKey: ${MINIO_ROOT_PASSWORD:-change-this-local-password}
+      Minio__BucketName: ${MINIO_BUCKET_NAME:-library-books}
+      Minio__UseSsl: "false"
+      Minio__PublicUseSsl: "false"
+
+  frontend:
+    build:
+      context: frontend/LibrarySystem.Web
+    ports:
+      - "${FRONTEND_PORT:-4200}:80"
+    depends_on:
+      - backend
+
+  cover-import:
+    build:
+      context: .
+      dockerfile: backend/tools/LibrarySystem.Tools.CoverImport/Dockerfile
+    profiles:
+      - tools
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    environment:
+      ConnectionStrings__LibrarySystemDatabase: Host=db;Port=5432;Database=${POSTGRES_DB:-library_system};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:-postgres}
+      Minio__Endpoint: minio:9000
+      Minio__AccessKey: ${MINIO_ROOT_USER:-minioadmin}
+      Minio__SecretKey: ${MINIO_ROOT_PASSWORD:-change-this-local-password}
+      Minio__BucketName: ${MINIO_BUCKET_NAME:-library-books}
+      Minio__UseSsl: "false"

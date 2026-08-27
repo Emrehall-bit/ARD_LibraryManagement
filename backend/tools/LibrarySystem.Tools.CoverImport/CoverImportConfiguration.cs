@@ -14,12 +14,15 @@ internal sealed record CoverImportConfiguration(
 
     public static CoverImportConfiguration Load()
     {
-        var repoRoot = FindRepoRoot();
-        var values = LoadDotEnv(Path.Combine(repoRoot.FullName, ".env"));
+        var repoRoot = TryFindRepoRoot();
+        var values = repoRoot is null
+            ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : LoadDotEnv(Path.Combine(repoRoot.FullName, ".env"));
+
         AddEnvironmentVariables(values);
 
         var connectionString = Get(values, "ConnectionStrings__LibrarySystemDatabase", "CONNECTIONSTRINGS__LIBRARYSYSTEMDATABASE")
-            ?? ReadConnectionStringFromAppSettings(repoRoot)
+            ?? (repoRoot is null ? null : ReadConnectionStringFromAppSettings(repoRoot))
             ?? throw new InvalidOperationException(
                 "Connection string not found. Set ConnectionStrings__LibrarySystemDatabase or configure backend/src/LibrarySystem.Api/appsettings.json.");
 
@@ -69,7 +72,7 @@ internal sealed record CoverImportConfiguration(
         }
     }
 
-    private static DirectoryInfo FindRepoRoot()
+    private static DirectoryInfo? TryFindRepoRoot()
     {
         var current = new DirectoryInfo(Environment.CurrentDirectory);
 
@@ -83,7 +86,7 @@ internal sealed record CoverImportConfiguration(
             current = current.Parent;
         }
 
-        throw new InvalidOperationException("Could not locate repository root containing backend/LibrarySystem.slnx.");
+        return null;
     }
 
     private static Dictionary<string, string> LoadDotEnv(string path)

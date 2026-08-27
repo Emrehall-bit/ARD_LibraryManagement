@@ -11,6 +11,7 @@ internal sealed class MinioBookImageStorage(
     IOptions<MinioOptions> minioOptions) : IBookImageStorage
 {
     private readonly MinioOptions options = RequireConfiguredOptions(minioOptions.Value);
+    private readonly IMinioClient readUrlClient = CreateReadUrlClient(minioOptions.Value);
 
     public async Task UploadAsync(
         string objectName,
@@ -98,7 +99,7 @@ internal sealed class MinioBookImageStorage(
                 .WithObject(objectName)
                 .WithExpiry((int)Math.Ceiling(expiry.TotalSeconds));
 
-            return await minioClient.PresignedGetObjectAsync(args);
+            return await readUrlClient.PresignedGetObjectAsync(args);
         }
         catch (MinioException exception)
         {
@@ -120,5 +121,20 @@ internal sealed class MinioBookImageStorage(
             ? options
             : throw new ObjectStorageException(
                 "Book image storage is not configured. Configure the Minio section before using image storage operations.");
+    }
+
+    private static IMinioClient CreateReadUrlClient(MinioOptions options)
+    {
+        var configuredOptions = RequireConfiguredOptions(options);
+        var readEndpoint = string.IsNullOrWhiteSpace(configuredOptions.PublicEndpoint)
+            ? configuredOptions.Endpoint
+            : configuredOptions.PublicEndpoint;
+        var useSsl = configuredOptions.PublicUseSsl ?? configuredOptions.UseSsl;
+
+        return new MinioClient()
+            .WithEndpoint(readEndpoint)
+            .WithCredentials(configuredOptions.AccessKey, configuredOptions.SecretKey)
+            .WithSSL(useSsl)
+            .Build();
     }
 }

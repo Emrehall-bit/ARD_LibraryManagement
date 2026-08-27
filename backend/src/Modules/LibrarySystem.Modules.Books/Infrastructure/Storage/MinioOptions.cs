@@ -6,6 +6,8 @@ public sealed class MinioOptions
 
     public string? Endpoint { get; init; }
 
+    public string? PublicEndpoint { get; init; }
+
     public string? AccessKey { get; init; }
 
     public string? SecretKey { get; init; }
@@ -14,9 +16,12 @@ public sealed class MinioOptions
 
     public bool UseSsl { get; init; }
 
+    public bool? PublicUseSsl { get; init; }
+
     internal bool HasAnyConfiguredValue()
     {
         return !string.IsNullOrWhiteSpace(Endpoint) ||
+            !string.IsNullOrWhiteSpace(PublicEndpoint) ||
             !string.IsNullOrWhiteSpace(AccessKey) ||
             !string.IsNullOrWhiteSpace(SecretKey) ||
             !string.IsNullOrWhiteSpace(BucketName);
