@@ -3,6 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
+import { BorrowBookRequest } from '../models/borrow-book-request.model';
 import { PagedAdminOverdueBorrows } from '../models/paged-admin-overdue-borrows.model';
 import { PagedBorrowHistory } from '../models/paged-borrow-history.model';
 import { BorrowedBook } from '../models/borrowed-book.model';
@@ -14,8 +15,10 @@ export class BorrowingApiService {
   private readonly http = inject(HttpClient);
   private readonly apiBaseUrl = environment.apiBaseUrl;
 
-  borrow(bookId: string): Observable<BorrowedBook> {
-    return this.http.post<BorrowedBook>(`${this.apiBaseUrl}/api/borrow/${bookId}`, null);
+  borrow(bookId: string, dueDate: string): Observable<BorrowedBook> {
+    const request: BorrowBookRequest = { dueDate };
+
+    return this.http.post<BorrowedBook>(`${this.apiBaseUrl}/api/borrow/${bookId}`, request);
   }
 
   returnBook(bookId: string): Observable<BorrowedBook> {

@@ -188,3 +188,62 @@
     </p-card>
   }
 </section>
+
+<p-dialog
+  header="Ödünç Al"
+  [visible]="isBorrowDialogVisible()"
+  (visibleChange)="isBorrowDialogVisible.set($event)"
+  (onHide)="closeBorrowDialog()"
+  [modal]="true"
+  [draggable]="false"
+  [resizable]="false"
+  [closable]="!isBorrowing()"
+  [dismissableMask]="!isBorrowing()"
+  styleClass="book-detail-borrow-dialog"
+>
+  @if (book(); as bookToBorrow) {
+    <form class="book-detail-borrow-form flex flex-column gap-3" (ngSubmit)="confirmBorrowBook()">
+      <div class="book-detail-borrow-form__summary">
+        <strong>{{ bookToBorrow.name }}</strong>
+        <span>{{ bookToBorrow.author }}</span>
+      </div>
+
+      <div class="book-detail-borrow-form__field">
+        <label for="bookDetailBorrowDueDate">Son Teslim Tarihi</label>
+        <input
+          id="bookDetailBorrowDueDate"
+          class="w-full"
+          pInputText
+          type="date"
+          name="bookDetailBorrowDueDate"
+          [ngModel]="borrowDueDate()"
+          [min]="getBorrowDueDateMinValue()"
+          [max]="getBorrowDueDateMaxValue()"
+          [disabled]="isBorrowing()"
+          (ngModelChange)="updateBorrowDueDate($any($event))"
+        />
+        @if (borrowDueDateError(); as dueDateError) {
+          <small>{{ dueDateError }}</small>
+        }
+      </div>
+
+      <div class="book-detail-borrow-form__footer flex justify-content-end gap-2">
+        <p-button
+          type="button"
+          label="Vazgeç"
+          severity="secondary"
+          [text]="true"
+          [disabled]="isBorrowing()"
+          (onClick)="closeBorrowDialog()"
+        />
+        <p-button
+          type="submit"
+          label="Ödünç Al"
+          icon="pi pi-bookmark"
+          [loading]="isBorrowing()"
+          [disabled]="isBorrowing()"
+        />
+      </div>
+    </form>
+  }
+</p-dialog>

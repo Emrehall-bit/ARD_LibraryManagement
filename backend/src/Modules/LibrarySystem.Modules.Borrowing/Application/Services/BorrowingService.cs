@@ -25,6 +25,7 @@ internal sealed class BorrowingService(
 {
     public async Task<BorrowRecordResponseDto> BorrowBookAsync(
         Guid bookId,
+        BorrowBookRequestDto? request = null,
         CancellationToken cancellationToken = default)
     {
         var userId = GetCurrentUserId();
@@ -70,7 +71,8 @@ internal sealed class BorrowingService(
             var stock = await bookInventoryService.DecreaseStockAsync(bookId, transactionCancellationToken);
 
             var borrowedAt = clock.UtcNow;
-            var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, borrowedAt);
+            var dueDate = ResolveDueDate(request?.DueDate, borrowedAt);
+            var borrowRecord = new BorrowRecord(Guid.NewGuid(), userId, bookId, borrowedAt, dueDate);
 
             await borrowRepository.AddAsync(borrowRecord, transactionCancellationToken);
             await borrowRepository.SaveChangesAsync(transactionCancellationToken);
@@ -301,6 +303,28 @@ internal sealed class BorrowingService(
             borrowRecord.GetStatus(utcNow).ToString(),
             borrowRecord.RenewalCount,
             borrowRecord.GetOverdueDays(utcNow));
+    }
+
+    private static DateTime ResolveDueDate(DateOnly? requestedDueDate, DateTime borrowedAt)
+    {
+        if (requestedDueDate is null)
+        {
+            return borrowedAt.AddDays(BorrowingLoanPolicy.DefaultLoanPeriodDays);
+        }
+
+        var earliestDueDate = DateOnly.FromDateTime(borrowedAt);
+        if (requestedDueDate.Value < earliestDueDate)
+        {
+            throw new BusinessException("Borrow due date cannot be earlier than today.");
+        }
+
+        var latestDueDate = DateOnly.FromDateTime(borrowedAt.AddMonths(BorrowingLoanPolicy.MaxLoanPeriodMonths));
+        if (requestedDueDate.Value > latestDueDate)
+        {
+            throw new BusinessException("Borrow due date cannot be later than one month from today.");
+        }
+
+        return requestedDueDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
     }
 
     private static OverdueBorrowRecordResponseDto MapToOverdueResponseDto(

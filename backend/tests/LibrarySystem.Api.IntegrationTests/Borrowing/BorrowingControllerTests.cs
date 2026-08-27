@@ -77,6 +77,40 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
     }
 
     [Fact]
+    public async Task BorrowBook_WithRequestedDueDateWithinOneMonth_ReturnsSuccessWithRequestedDueDate()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync(stock: 2);
+        var dueDate = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(20));
+
+        var response = await client.PostAsJsonAsync($"/api/borrow/{bookId}", new BorrowBookRequest(dueDate));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var borrowRecord = await response.Content.ReadFromJsonAsync<BorrowRecordResponse>();
+
+        Assert.NotNull(borrowRecord);
+        Assert.Equal(dueDate.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc), borrowRecord.DueDate);
+    }
+
+    [Fact]
+    public async Task BorrowBook_WithRequestedDueDateAfterOneMonth_ReturnsBadRequest()
+    {
+        using var client = factory.CreateApiClient();
+        var bookId = await SeedBookAsync(stock: 2);
+        var dueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(BorrowingLoanPolicy.MaxLoanPeriodMonths).AddDays(1));
+
+        var response = await client.PostAsJsonAsync($"/api/borrow/{bookId}", new BorrowBookRequest(dueDate));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        var problemDetails = await response.Content.ReadFromJsonAsync<ProblemDetailsResponse>();
+
+        Assert.Equal("Business rule violation.", problemDetails?.Title);
+        Assert.Equal("Borrow due date cannot be later than one month from today.", problemDetails?.Detail);
+    }
+
+    [Fact]
     public async Task BorrowBook_WhenStockNotificationFails_ReturnsSuccessAndKeepsCommittedChanges()
     {
         using var client = factory.CreateApiClient();
@@ -1361,6 +1395,8 @@ public sealed class BorrowingControllerTests(LibrarySystemApiFactory factory) : 
         string Status,
         int RenewalCount,
         int OverdueDays);
+
+    private sealed record BorrowBookRequest(DateOnly DueDate);
 
     private sealed record PagedBorrowHistoryResponse(
         IReadOnlyList<BorrowRecordResponse> Items,

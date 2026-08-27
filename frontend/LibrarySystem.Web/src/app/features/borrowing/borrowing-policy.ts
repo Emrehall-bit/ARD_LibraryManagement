@@ -1,3 +1,5 @@
 export const BORROWING_POLICY = {
-  maxActiveBorrowCount: 3
+  defaultLoanPeriodDays: 14,
+  maxActiveBorrowCount: 3,
+  maxLoanPeriodMonths: 1
 } as const;

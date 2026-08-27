@@ -6,6 +6,7 @@ public interface IBorrowingService
 {
     Task<BorrowRecordResponseDto> BorrowBookAsync(
         Guid bookId,
+        BorrowBookRequestDto? request = null,
         CancellationToken cancellationToken = default);
 
     Task<BorrowRecordResponseDto> ReturnBookAsync(

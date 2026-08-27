@@ -4,6 +4,7 @@ using LibrarySystem.Shared.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace LibrarySystem.Modules.Borrowing.Presentation;
 
@@ -19,9 +20,10 @@ public sealed class BorrowingController(IBorrowingService borrowingService) : Co
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<BorrowRecordResponseDto>> BorrowBook(
         Guid bookId,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] BorrowBookRequestDto? request,
         CancellationToken cancellationToken)
     {
-        var borrowRecord = await borrowingService.BorrowBookAsync(bookId, cancellationToken);
+        var borrowRecord = await borrowingService.BorrowBookAsync(bookId, request, cancellationToken);
 
         return Ok(borrowRecord);
     }

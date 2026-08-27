@@ -313,6 +313,62 @@
   display: block;
 }
 
+:host ::ng-deep .book-detail-borrow-dialog {
+  width: min(94vw, 28rem);
+}
+
+.book-detail-borrow-form {
+  width: 100%;
+  padding-top: 0.2rem;
+}
+
+.book-detail-borrow-form__summary {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.book-detail-borrow-form__summary strong {
+  color: var(--app-primary-dark);
+  font-size: 0.98rem;
+  line-height: 1.2;
+}
+
+.book-detail-borrow-form__summary span {
+  color: var(--app-muted-text);
+  font-size: 0.84rem;
+  line-height: 1.2;
+}
+
+.book-detail-borrow-form__field label {
+  display: block;
+  margin-bottom: 0.4rem;
+  color: var(--app-primary-dark);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.book-detail-borrow-form__field input {
+  width: 100%;
+  min-height: 2.45rem;
+  border-color: var(--app-border);
+  border-radius: 0.55rem;
+  background: #fffdf8;
+  font-size: 0.9rem;
+}
+
+.book-detail-borrow-form__field small {
+  display: block;
+  margin-top: 0.35rem;
+  color: #b42318;
+  font-size: 0.78rem;
+}
+
+.book-detail-borrow-form__footer {
+  margin-top: 0.25rem;
+}
+
 @media (max-width: 767px) {
   .book-detail {
     grid-template-columns: 1fr;

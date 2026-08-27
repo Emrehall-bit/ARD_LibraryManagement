@@ -1,11 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MessageService } from 'primeng/api';
 import { ButtonModule } from 'primeng/button';
 import { CardModule } from 'primeng/card';
+import { DialogModule } from 'primeng/dialog';
 import { GalleryModule } from 'primeng/gallery';
+import { InputTextModule } from 'primeng/inputtext';
 import { MessageModule } from 'primeng/message';
 import { ProgressSpinnerModule } from 'primeng/progressspinner';
 import { TagModule } from 'primeng/tag';
@@ -29,7 +32,10 @@ type StockSeverity = 'success' | 'danger';
   imports: [
     ButtonModule,
     CardModule,
+    DialogModule,
+    FormsModule,
     GalleryModule,
+    InputTextModule,
     MessageModule,
     ProgressSpinnerModule,
     RouterLink,
@@ -57,6 +63,9 @@ export class BookDetailPageComponent implements OnInit {
   protected readonly isLoading = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly isBorrowing = signal(false);
+  protected readonly isBorrowDialogVisible = signal(false);
+  protected readonly borrowDueDate = signal('');
+  protected readonly borrowDueDateError = signal<string | null>(null);
   protected readonly activeBorrowCount = signal(0);
   protected readonly hasOverdueBorrow = signal(false);
   protected readonly isAuthenticated = this.authState.isAuthenticated;
@@ -198,10 +207,44 @@ export class BookDetailPageComponent implements OnInit {
       return;
     }
 
+    this.borrowDueDate.set(this.getDefaultBorrowDueDateValue());
+    this.borrowDueDateError.set(null);
+    this.isBorrowDialogVisible.set(true);
+  }
+
+  protected closeBorrowDialog(force = false): void {
+    if (this.isBorrowing() && !force) {
+      return;
+    }
+
+    this.isBorrowDialogVisible.set(false);
+    this.borrowDueDate.set('');
+    this.borrowDueDateError.set(null);
+  }
+
+  protected updateBorrowDueDate(value: string): void {
+    this.borrowDueDate.set(value);
+    this.borrowDueDateError.set(null);
+  }
+
+  protected confirmBorrowBook(): void {
+    const currentBook = this.book();
+
+    if (!currentBook ||
+      currentBook.stock <= 0 ||
+      this.isBorrowing() ||
+      (this.isAuthenticated() && (this.hasOverdueBorrow() || this.hasReachedBorrowLimit()))) {
+      return;
+    }
+
+    if (!this.validateBorrowDueDate()) {
+      return;
+    }
+
     this.isBorrowing.set(true);
 
     this.borrowingApi
-      .borrow(currentBook.id)
+      .borrow(currentBook.id, this.borrowDueDate())
       .pipe(finalize(() => this.isBorrowing.set(false)))
       .subscribe({
         next: () => {
@@ -210,6 +253,7 @@ export class BookDetailPageComponent implements OnInit {
             summary: 'Başarılı',
             detail: 'Kitap ödünç alındı.'
           });
+          this.closeBorrowDialog(true);
           this.loadBorrowEligibility();
           this.loadBook(currentBook.id);
         },
@@ -221,6 +265,14 @@ export class BookDetailPageComponent implements OnInit {
           });
         }
       });
+  }
+
+  protected getBorrowDueDateMinValue(): string {
+    return this.formatDateInputValue(new Date());
+  }
+
+  protected getBorrowDueDateMaxValue(): string {
+    return this.formatDateInputValue(this.addCalendarMonths(new Date(), BORROWING_POLICY.maxLoanPeriodMonths));
   }
 
   private loadBook(id: string): void {
@@ -306,11 +358,62 @@ export class BookDetailPageComponent implements OnInit {
       return 'Aynı anda en fazla 3 kitap ödünç alabilirsiniz.';
     }
 
+    if (error.status === 400 && problem?.detail?.includes('Borrow due date')) {
+      return 'Son teslim tarihi bugün ile 1 ay sonrası arasında olmalıdır.';
+    }
+
     if (error.status === 409 && problem?.title === 'Concurrency conflict.') {
       return 'Kitap durumu değişti. Lütfen tekrar deneyin.';
     }
 
     return 'Kitap ödünç alınırken bir hata oluştu.';
+  }
+
+  private validateBorrowDueDate(): boolean {
+    const dueDate = this.borrowDueDate();
+
+    if (!dueDate) {
+      this.borrowDueDateError.set('Son teslim tarihi seçilmelidir.');
+      return false;
+    }
+
+    if (dueDate < this.getBorrowDueDateMinValue()) {
+      this.borrowDueDateError.set('Son teslim tarihi bugünden önce olamaz.');
+      return false;
+    }
+
+    if (dueDate > this.getBorrowDueDateMaxValue()) {
+      this.borrowDueDateError.set('Son teslim tarihi en fazla 1 ay sonrası olabilir.');
+      return false;
+    }
+
+    return true;
+  }
+
+  private getDefaultBorrowDueDateValue(): string {
+    const dueDate = new Date();
+    dueDate.setDate(dueDate.getDate() + BORROWING_POLICY.defaultLoanPeriodDays);
+    const maxDueDate = this.addCalendarMonths(new Date(), BORROWING_POLICY.maxLoanPeriodMonths);
+
+    return this.formatDateInputValue(dueDate > maxDueDate ? maxDueDate : dueDate);
+  }
+
+  private addCalendarMonths(date: Date, months: number): Date {
+    const result = new Date(date);
+    const targetDay = result.getDate();
+
+    result.setDate(1);
+    result.setMonth(result.getMonth() + months);
+    result.setDate(Math.min(targetDay, new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate()));
+
+    return result;
+  }
+
+  private formatDateInputValue(date: Date): string {
+    const month = `${date.getMonth() + 1}`.padStart(2, '0');
+    const day = `${date.getDate()}`.padStart(2, '0');
+
+    return `${date.getFullYear()}-${month}-${day}`;
   }
 
   private getProblemDetails(error: HttpErrorResponse): { title?: string; detail?: string } | null {
