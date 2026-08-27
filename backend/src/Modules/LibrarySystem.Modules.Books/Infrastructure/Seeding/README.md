@@ -20,4 +20,4 @@ Regenerate the file with:
 .\generate-books-seed.ps1
 ```
 
-The generator fetches bibliographic records, normalizes titles/authors, filters invalid metadata, removes duplicate `name + author` pairs, assigns deterministic stock values, and writes 5000 seed entries.
+The generator fetches bibliographic records, normalizes titles/authors, filters invalid metadata, removes duplicate `name + author` pairs, assigns deterministic stock values, and writes 200 seed entries by default.

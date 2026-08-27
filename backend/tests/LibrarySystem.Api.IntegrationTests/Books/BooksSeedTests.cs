@@ -10,7 +10,7 @@ namespace LibrarySystem.Api.IntegrationTests.Books;
 [Collection(ApiIntegrationTestCollection.Name)]
 public sealed class BooksSeedTests(LibrarySystemApiFactory factory) : IAsyncLifetime
 {
-    private const int ExpectedSeedCount = 5000;
+    private const int ExpectedSeedCount = BooksSeedExtensions.DevelopmentSeedCount;
 
     public async Task InitializeAsync()
     {

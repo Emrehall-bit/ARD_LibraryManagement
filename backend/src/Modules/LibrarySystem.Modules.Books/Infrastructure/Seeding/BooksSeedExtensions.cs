@@ -8,6 +8,8 @@ namespace LibrarySystem.Modules.Books.Infrastructure.Seeding;
 
 public static class BooksSeedExtensions
 {
+    public const int DevelopmentSeedCount = 200;
+
     private const string SeedResourceName =
         "LibrarySystem.Modules.Books.Infrastructure.Seeding.books.seed.json";
 
@@ -25,6 +27,7 @@ public static class BooksSeedExtensions
 
         var seedBooks = await ReadSeedBooksAsync(cancellationToken);
         var books = seedBooks
+            .Take(DevelopmentSeedCount)
             .Select(seedBook => new Book(
                 Guid.NewGuid(),
                 seedBook.Name,

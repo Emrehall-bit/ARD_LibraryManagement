@@ -1,5 +1,5 @@
 param(
-    [int] $TargetCount = 5000,
+    [int] $TargetCount = 200,
     [int] $PageSize = 100
 )
 
